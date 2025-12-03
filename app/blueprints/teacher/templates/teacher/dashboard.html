@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Teacher Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>My Classes</h1>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('teacher.import_class') }}" class="btn btn-primary">
+                <i class="bi bi-file-earmark-arrow-up"></i> Import Class
+            </a>
+        </div>
+    </div>
+    
+    {% if classrooms %}
+    <div class="row">
+        {% for classroom in classrooms %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">{{ classroom.name }}</h5>
+                    <p class="card-text text-muted">
+                        <i class="bi bi-people"></i> {{ classroom.students.count() }} students<br>
+                        <i class="bi bi-hdd-rack"></i> {{ classroom.students.all()|map(attribute='vms')|map('list')|sum(start=[])|length }} VMs
+                    </p>
+                    <p class="card-text">
+                        <small class="text-muted">Created: {{ classroom.created_at.strftime('%Y-%m-%d') }}</small>
+                    </p>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a href="{{ url_for('teacher.class_detail', class_id=classroom.id) }}" class="btn btn-primary btn-sm">
+                        View Details
+                    </a>
+                    <form method="POST" action="{{ url_for('teacher.delete_class', class_id=classroom.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this class and all its students/VMs?')">
+                            <i class="bi bi-trash"></i> Delete
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <h4>No classes yet</h4>
+        <p>Click "Import Class" to create your first class and add students.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

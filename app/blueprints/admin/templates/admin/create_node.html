@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Node{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Add Proxmox Node</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.create_node') }}">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            {{ form.node_name.label(class="form-label") }}
+                            {{ form.node_name(class="form-control" + (" is-invalid" if form.node_name.errors else ""), placeholder="e.g., pve1") }}
+                            {% if form.node_name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.node_name.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">Must match the node name in Proxmox cluster</small>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.max_vms.label(class="form-label") }}
+                                {{ form.max_vms(class="form-control" + (" is-invalid" if form.max_vms.errors else "")) }}
+                                {% if form.max_vms.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.max_vms.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">Maximum VMs to deploy on this node</small>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                {{ form.priority.label(class="form-label") }}
+                                {{ form.priority(class="form-control" + (" is-invalid" if form.priority.errors else "")) }}
+                                {% if form.priority.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.priority.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">Higher priority = preferred for deployment</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                {{ form.storage_pools.label(class="form-label mb-0") }}
+                                <button type="button" id="loadStoragesBtn" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-cloud-download"></i> Load from Proxmox
+                                </button>
+                            </div>
+                            {{ form.storage_pools(class="form-control" + (" is-invalid" if form.storage_pools.errors else ""), placeholder="local-lvm, fast-ssd, slow-hdd") }}
+                            {% if form.storage_pools.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.storage_pools.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">List one or more storage pools for this node (comma-separated). VM clones will be balanced across them.</small>
+                            <div id="storagesPicker" class="mt-2" style="display:none;">
+                                <div class="small text-muted mb-1">Available storages on this node:</div>
+                                <select id="storagesSelect" class="form-select" multiple size="6"></select>
+                                <div class="form-text">Use Ctrl/Cmd to select multiple.</div>
+                                <input type="hidden" name="selected_storages" id="selectedStorages">
+                                <button type="button" id="applyStoragesBtn" class="btn btn-sm btn-secondary mt-2">Add selected storages</button>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            {{ form.is_active(class="form-check-input") }}
+                            {{ form.is_active.label(class="form-check-label") }}
+                            <small class="form-text text-muted d-block">Only active nodes will be used for VM deployment</small>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('admin.nodes') }}" class="btn btn-secondary">Cancel</a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const loadBtn = document.getElementById('loadStoragesBtn');
+    const storagesPicker = document.getElementById('storagesPicker');
+    const storagesList = document.getElementById('storagesList');
+    const applyBtn = document.getElementById('applyStoragesBtn');
+    const nodeInput = document.getElementById('{{ form.node_name.id }}');
+    const poolsInput = document.getElementById('{{ form.storage_pools.id }}');
+
+    function applySelected() {
+        const selected = Array.from(document.getElementById('storagesSelect').selectedOptions).map(o => o.value);
+        document.getElementById('selectedStorages').value = selected.join(',');
+        // Keep CSV in sync for backward-compat display
+        poolsInput.value = selected.join(', ');
+        alert('Selected storages added. Save the node to persist them.');
+    }
+
+    applyBtn.addEventListener('click', applySelected);
+
+    loadBtn.addEventListener('click', async function() {
+        const node = nodeInput.value.trim();
+        if (!node) { alert('Enter a node name first (e.g., pve1).'); return; }
+        loadBtn.disabled = true;
+        loadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+        try {
+            const resp = await fetch(`{{ url_for('admin.api_node_storages', node_name='__NODE__') }}`.replace('__NODE__', encodeURIComponent(node)));
+            const data = await resp.json();
+            if (!data.ok) throw new Error(data.error || 'Failed to fetch storages');
+            const select = document.getElementById('storagesSelect');
+            select.innerHTML = '';
+            if (data.storages.length === 0) {
+                const opt = document.createElement('option');
+                opt.textContent = 'No storages found on this node';
+                select.appendChild(opt);
+            } else {
+                data.storages.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.name;
+                    opt.textContent = s.name + (s.active ? '' : ' (inactive)');
+                    if (s.active) opt.selected = true;
+                    select.appendChild(opt);
+                });
+            }
+            storagesPicker.style.display = 'block';
+        } catch (e) {
+            alert('Error: ' + e.message);
+        } finally {
+            loadBtn.disabled = false;
+            loadBtn.innerHTML = '<i class="bi bi-cloud-download"></i> Load from Proxmox';
+        }
+    });
+});
+</script>
+{% endblock %}

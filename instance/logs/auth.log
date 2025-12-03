@@ -1,0 +1,21 @@
+2025-11-18 03:08:53,350 INFO auth: teacher.success ip=192.168.1.18 user_id=3 email=teacher1
+2025-11-18 03:19:55,830 INFO auth: teacher.success ip=127.0.0.1 user_id=1 email=admin@cyberlab.local
+2025-11-18 03:35:44,942 INFO auth: user.success ip=127.0.0.1 user_id=2 username=admin
+2025-11-18 03:37:36,322 INFO auth: user.success ip=127.0.0.1 user_id=2 username=admin
+2025-11-18 03:40:28,512 INFO auth: user.success ip=192.168.1.90 user_id=3 username=teacher1
+2025-11-18 03:40:46,506 INFO auth: user.success ip=192.168.1.90 user_id=2 username=admin
+2025-11-18 03:42:13,814 INFO auth: user.success ip=192.168.1.90 user_id=3 username=teacher1
+2025-11-18 18:47:22,903 INFO auth: user.success ip=192.168.1.90 user_id=2 username=admin
+2025-11-19 17:34:40,863 INFO auth: user.success ip=192.168.1.90 user_id=3 username=teacher1
+2025-11-19 18:18:48,335 INFO auth: user.success ip=192.168.1.90 user_id=3 username=teacher1
+2025-11-19 18:19:06,104 WARNING auth: user.failure ip=192.168.1.90 username=admin
+2025-11-19 18:19:16,468 WARNING auth: login.unknown ip=192.168.1.90 username=inadmin
+2025-11-19 18:19:27,677 INFO auth: user.success ip=192.168.1.90 user_id=2 username=admin
+2025-12-01 14:15:00,721 WARNING auth: user.failure ip=192.168.1.8 username=admin
+2025-12-01 14:15:50,687 INFO auth: user.success ip=192.168.1.8 user_id=2 username=admin
+2025-12-02 13:23:55,094 WARNING auth: user.failure ip=192.168.1.8 username=teacher1
+2025-12-02 13:24:03,843 WARNING auth: user.failure ip=192.168.1.8 username=teacher1
+2025-12-02 13:24:06,946 INFO auth: user.success ip=192.168.1.8 user_id=2 username=admin
+2025-12-02 13:36:32,980 INFO auth: user.success ip=192.168.1.8 user_id=2 username=admin
+2025-12-02 13:59:22,109 INFO auth: user.success ip=192.168.1.8 user_id=2 username=admin
+2025-12-02 14:09:54,893 INFO auth: user.success ip=192.168.1.8 user_id=1 username=admin

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}CyberLab Admin{% endblock %}</title>
+    
+    <!-- Prevent theme flashing -->
+    <script nonce="{{ csp_nonce() }}">
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            const htmlElement = document.documentElement;
+            
+            // Set theme immediately to prevent flashing
+            htmlElement.setAttribute('data-bs-theme', savedTheme);
+            htmlElement.className = savedTheme; // Additional class for instant CSS targeting
+            
+            // Set navbar classes early when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', setNavbarTheme);
+            } else {
+                setNavbarTheme();
+            }
+            
+            function setNavbarTheme() {
+                const navbar = document.getElementById('mainNavbar');
+                if (navbar) {
+                    if (savedTheme === 'dark') {
+                        navbar.classList.add('navbar-dark');
+                        navbar.classList.remove('navbar-light');
+                    } else {
+                        navbar.classList.add('navbar-light');
+                        navbar.classList.remove('navbar-dark');
+                    }
+                }
+            }
+        })();
+    </script>
+    
+    <!-- Bootstrap 5.3 CSS (Local) -->
+    <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% set is_student_logged_in = session.get('student_id') %}
+    {% if current_user.is_authenticated and not is_student_logged_in %}
+    {% include '_navbar.html' %}
+    {% endif %}
+    
+    <div class="{% if current_user.is_authenticated and not is_student_logged_in %}content-wrapper{% endif %}">
+        {% include '_flash_messages.html' %}
+        
+        {% block content %}{% endblock %}
+    </div>
+    
+    <!-- Bootstrap 5.3 JS Bundle (Local) -->
+    <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+    
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

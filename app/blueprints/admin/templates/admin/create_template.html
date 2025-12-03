@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}Create VM Template{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Register VM Template</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.create_template') }}">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            {{ form.name.label(class="form-label") }}
+                            {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""), placeholder="e.g., Ubuntu 22.04 Desktop") }}
+                            {% if form.name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.name.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.proxmox_template_id.label(class="form-label") }}
+                                {{ form.proxmox_template_id(class="form-control" + (" is-invalid" if form.proxmox_template_id.errors else ""), placeholder="9000") }}
+                                {% if form.proxmox_template_id.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.proxmox_template_id.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">The VM ID of the template in Proxmox</small>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                {{ form.proxmox_node.label(class="form-label") }}
+                                {{ form.proxmox_node(class="form-control" + (" is-invalid" if form.proxmox_node.errors else ""), placeholder="pve") }}
+                                {% if form.proxmox_node.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.proxmox_node.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.memory.label(class="form-label") }}
+                                {{ form.memory(class="form-control" + (" is-invalid" if form.memory.errors else "")) }}
+                                {% if form.memory.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.memory.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">Memory in MB</small>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                {{ form.cores.label(class="form-label") }}
+                                {{ form.cores(class="form-control" + (" is-invalid" if form.cores.errors else "")) }}
+                                {% if form.cores.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.cores.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.description.label(class="form-label") }}
+                            {{ form.description(class="form-control", rows=3) }}
+                            <small class="form-text text-muted">Optional description of this template</small>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            {{ form.is_active(class="form-check-input") }}
+                            {{ form.is_active.label(class="form-check-label") }}
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            {{ form.replicate_to_all_nodes(class="form-check-input") }}
+                            {{ form.replicate_to_all_nodes.label(class="form-check-label") }}
+                            <small class="form-text text-muted d-block">Automatically replicate this template to all active nodes for load balancing</small>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">Cancel</a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

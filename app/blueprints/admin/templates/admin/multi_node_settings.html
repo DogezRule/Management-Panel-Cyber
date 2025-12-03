@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}Multi-Node Settings{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Multi-Node System Settings</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-4">
+                        Configure global settings for multi-node VM deployment and load balancing.
+                    </p>
+                    
+                    <form method="POST" action="{{ url_for('admin.multi_node_settings') }}">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-4">
+                            <h6 class="text-primary">VM Deployment Settings</h6>
+                            <hr>
+                            
+                            <div class="mb-3">
+                                {{ form.max_vms_per_node.label(class="form-label") }}
+                                {{ form.max_vms_per_node(class="form-control" + (" is-invalid" if form.max_vms_per_node.errors else "")) }}
+                                {% if form.max_vms_per_node.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.max_vms_per_node.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">Default maximum VMs per node (applies to all nodes)</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                {{ form.node_selection_strategy.label(class="form-label") }}
+                                {{ form.node_selection_strategy(class="form-select" + (" is-invalid" if form.node_selection_strategy.errors else "")) }}
+                                {% if form.node_selection_strategy.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.node_selection_strategy.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">Strategy for selecting which node to deploy VMs on</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h6 class="text-primary">Performance Settings</h6>
+                            <hr>
+                            
+                            <div class="mb-3 form-check">
+                                {{ form.use_linked_clones(class="form-check-input") }}
+                                {{ form.use_linked_clones.label(class="form-check-label") }}
+                                <small class="form-text text-muted d-block">
+                                    <strong>Recommended:</strong> Linked clones use less storage and clone faster, 
+                                    but require the template to have a snapshot named '__base__'
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h6 class="text-primary">Template Management</h6>
+                            <hr>
+                            
+                            <div class="mb-3 form-check">
+                                {{ form.auto_replicate_templates(class="form-check-input") }}
+                                {{ form.auto_replicate_templates.label(class="form-check-label") }}
+                                <small class="form-text text-muted d-block">
+                                    Automatically replicate templates to all nodes when needed for deployment
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Note:</strong> Some settings require application restart to take full effect. 
+                            Consider updating your <code>.env</code> file for persistence.
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">Cancel</a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

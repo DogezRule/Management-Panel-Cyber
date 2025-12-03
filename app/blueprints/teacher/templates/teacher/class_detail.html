@@ -1,0 +1,369 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ classroom.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>{{ classroom.name }}</h1>
+            <p class="text-muted">{{ student_data|length }} students</p>
+        </div>
+        <div class="col-auto">
+            <div class="d-flex gap-2 align-items-center">
+                <form method="POST" action="{{ url_for('teacher.class_bulk_vm_cleanup', class_id=classroom.id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Stop and delete ALL VMs in this class? This cannot be undone.')">
+                        <i class="bi bi-exclamation-triangle"></i> Remove All VMs
+                    </button>
+                </form>
+                <a class="btn btn-outline-primary" href="{{ url_for('teacher.download_class_credentials', class_id=classroom.id) }}">
+                    <i class="bi bi-download"></i> Download Credentials CSV
+                </a>
+                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                    <i class="bi bi-person-plus"></i> Add Student
+            </button>
+            <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+    
+    {% if student_data %}
+    <!-- Bulk VM Deployment -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0">Bulk VM Deployment</h6>
+        </div>
+        <div class="card-body">
+            <form id="bulkDeployForm" method="POST" action="{{ url_for('teacher.deploy_bulk_vms', class_id=classroom.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="row align-items-end mb-3">
+                    <div class="col-md-4">
+                        <label for="bulk_template_id" class="form-label">Select VM Template</label>
+                        <select name="template_id" id="bulk_template_id" class="form-select" required>
+                            <option value="">-- Choose Template --</option>
+                            {% for template in templates %}
+                            <option value="{{ template.id }}">
+                                {{ template.name }} ({{ template.memory }}MB RAM, {{ template.cores }} cores)
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <div>
+                            <button type="button" id="selectAllStudents" class="btn btn-outline-primary btn-sm">Select All</button>
+                            <button type="button" id="selectNoneStudents" class="btn btn-outline-secondary btn-sm">Select None</button>
+                            <button type="button" id="selectNoVMStudents" class="btn btn-outline-info btn-sm">Select Students Without VMs</button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-success" id="bulkDeployBtn" disabled>
+                            <i class="bi bi-hdd-rack"></i> Deploy VMs for Selected Students
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="selectedCount" class="text-muted mb-2">No students selected</div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>
+                        <input type="checkbox" id="masterCheckbox" class="form-check-input">
+                    </th>
+                    <th>Student Name</th>
+                    <th>Student Credentials</th>
+                    <th>VMs</th>
+                    <th>VM Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in student_data %}
+                <tr>
+                    <td>
+                        <input type="checkbox" name="student_ids" value="{{ data.student.id }}" 
+                               class="form-check-input student-checkbox" form="bulkDeployForm"
+                               data-has-vm="{{ 'true' if data.vms else 'false' }}">
+                    </td>
+                    <td><strong>{{ data.student.name }}</strong></td>
+                    <td>
+                        <div>
+                            <small class="text-muted">Student Username:</small> <code>{{ data.student.username or 'N/A' }}</code><br>
+                            <small class="text-muted">Student Password:</small> <code>{{ data.initial_password or 'N/A' }}</code><br>
+                            <!-- Legacy remote username removed -->
+                        </div>
+                    </td>
+                    <td>{{ data.vms|length }}</td>
+                    <td>
+                        {% if data.vms %}
+                            {% for vm in data.vms %}
+                            <div class="mb-2">
+                                <span class="badge bg-secondary">VM {{ vm.proxmox_vmid }}</span>
+                                <span class="badge 
+                                    {% if vm.status == 'running' %}bg-success
+                                    {% elif vm.status == 'stopped' %}bg-warning
+                                    {% elif vm.status == 'error' %}bg-danger
+                                    {% else %}bg-info{% endif %}" 
+                                    data-vm-id="{{ vm.id }}">
+                                    {{ vm.status }}
+                                </span>
+                                {% if vm.ip_address %}
+                                <small class="text-muted">{{ vm.ip_address }}</small>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <span class="text-muted">No VMs</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <!-- Student Management Buttons -->
+                        <div class="d-flex flex-column gap-2">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <!-- Deploy VM button -->
+                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" 
+                                        data-bs-target="#deployVMModal{{ data.student.id }}">
+                                    <i class="bi bi-hdd-rack"></i> Deploy VM
+                                </button>
+                                <!-- Reset password button -->
+                                <form method="POST" action="{{ url_for('teacher.reset_student_password', student_id=data.student.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-outline-warning">
+                                        <i class="bi bi-key"></i> Reset Password
+                                    </button>
+                                </form>
+                                
+                                <!-- Delete student button -->
+                                <form method="POST" action="{{ url_for('teacher.delete_student', student_id=data.student.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete {{ data.student.name }} and all their VMs?')">
+                                        <i class="bi bi-trash"></i> Delete Student
+                                    </button>
+                                </form>
+                            </div>
+                            
+                            <!-- VM Action Buttons -->
+                            {% for vm in data.vms %}
+                            <div class=\"card border-0 bg-light p-2 vm-action-card\">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted fw-bold">VM {{ vm.proxmox_vmid }}</small>
+                                    <span class="badge 
+                                        {% if vm.status == 'running' %}bg-success
+                                        {% elif vm.status == 'stopped' %}bg-warning
+                                        {% elif vm.status == 'error' %}bg-danger
+                                        {% else %}bg-info{% endif %}" 
+                                        data-vm-id="{{ vm.id }}">
+                                        {{ vm.status }}
+                                    </span>
+                                </div>
+                                <div class="btn-group btn-group-sm w-100" role="group">
+                                    <!-- Console button -->
+                                    <a href="{{ url_for('teacher.console', vm_id=vm.id) }}" target="_blank" 
+                                       class="btn btn-primary flex-fill" title="Open VM Console">
+                                        <i class="bi bi-display"></i>
+                                    </a>
+                                    
+                                    <!-- Start/Stop button -->
+                                    {% if vm.status == 'running' %}
+                                    <form method="POST" action="{{ url_for('teacher.stop_vm_route', vm_id=vm.id) }}" class="flex-fill">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-warning btn-sm w-100">
+                                            <i class="bi bi-stop-fill"></i>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <form method="POST" action="{{ url_for('teacher.start_vm_route', vm_id=vm.id) }}" class="flex-fill">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-success btn-sm w-100">
+                                            <i class="bi bi-play-fill"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    
+                                    <!-- Delete VM button -->
+                                    <form method="POST" action="{{ url_for('teacher.delete_vm_route', vm_id=vm.id) }}" class="flex-fill">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-danger btn-sm w-100" 
+                                                onclick="return confirm('Delete VM {{ vm.proxmox_vmid }}?')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </td>
+                </tr>
+                
+                <!-- Deploy VM Modal for this student -->
+                <div class="modal fade" id="deployVMModal{{ data.student.id }}" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Deploy VM for {{ data.student.name }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <form method="POST" action="{{ url_for('teacher.deploy_vm', student_id=data.student.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label for="template_id" class="form-label">Select VM Template</label>
+                                        <select name="template_id" id="template_id" class="form-select" required>
+                                            <option value="">-- Choose Template --</option>
+                                            {% for template in templates %}
+                                            <option value="{{ template.id }}">
+                                                {{ template.name }} ({{ template.memory }}MB RAM, {{ template.cores }} cores)
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="alert alert-info mb-0">
+                                        This will clone the template, start the VM, and provide web console access for {{ data.student.name }}.
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-primary">Deploy VM</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No students in this class yet. Click "Add Student" to add some.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add Student Modal -->
+<div class="modal fade" id="addStudentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Student</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('teacher.add_student', class_id=classroom.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="student_name" class="form-label">Student Name</label>
+                        <input type="text" name="student_name" id="student_name" class="form-control" required>
+                        <div class="form-text">Username & password will be generated automatically.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Student</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce() }}">
+// Auto-refresh VM statuses every 10 seconds
+setInterval(() => {
+    document.querySelectorAll('[data-vm-id]').forEach(badge => {
+        const vmId = badge.getAttribute('data-vm-id');
+        fetch(`/api/vm/${vmId}/status`)
+            .then(r => r.json())
+            .then(data => {
+                badge.textContent = data.status;
+                badge.className = 'badge ' + (
+                    data.status === 'running' ? 'bg-success' :
+                    data.status === 'stopped' ? 'bg-warning' :
+                    data.status === 'error' ? 'bg-danger' : 'bg-info'
+                );
+            })
+            .catch(e => console.error('Failed to update VM status:', e));
+    });
+}, 10000);
+
+// Bulk deployment functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const masterCheckbox = document.getElementById('masterCheckbox');
+    const studentCheckboxes = document.querySelectorAll('.student-checkbox');
+    const selectAllBtn = document.getElementById('selectAllStudents');
+    const selectNoneBtn = document.getElementById('selectNoneStudents');
+    const selectNoVMBtn = document.getElementById('selectNoVMStudents');
+    const bulkDeployBtn = document.getElementById('bulkDeployBtn');
+    const selectedCount = document.getElementById('selectedCount');
+    const templateSelect = document.getElementById('bulk_template_id');
+    
+    function updateSelectedCount() {
+        const selected = document.querySelectorAll('.student-checkbox:checked').length;
+        const hasTemplate = templateSelect.value !== '';
+        
+        selectedCount.textContent = selected === 0 ? 'No students selected' : 
+                                  selected === 1 ? '1 student selected' : 
+                                  `${selected} students selected`;
+        
+        bulkDeployBtn.disabled = selected === 0 || !hasTemplate;
+        
+        // Update master checkbox state
+        const allChecked = Array.from(studentCheckboxes).every(cb => cb.checked);
+        const noneChecked = Array.from(studentCheckboxes).every(cb => !cb.checked);
+        masterCheckbox.checked = allChecked;
+        masterCheckbox.indeterminate = !allChecked && !noneChecked;
+    }
+    
+    // Master checkbox functionality
+    masterCheckbox.addEventListener('change', function() {
+        studentCheckboxes.forEach(cb => cb.checked = this.checked);
+        updateSelectedCount();
+    });
+    
+    // Individual checkbox listeners
+    studentCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+    
+    // Template selection listener
+    templateSelect.addEventListener('change', updateSelectedCount);
+    
+    // Bulk selection buttons
+    selectAllBtn.addEventListener('click', function() {
+        studentCheckboxes.forEach(cb => cb.checked = true);
+        updateSelectedCount();
+    });
+    
+    selectNoneBtn.addEventListener('click', function() {
+        studentCheckboxes.forEach(cb => cb.checked = false);
+        updateSelectedCount();
+    });
+    
+    selectNoVMBtn.addEventListener('click', function() {
+        studentCheckboxes.forEach(cb => {
+            cb.checked = cb.getAttribute('data-has-vm') === 'false';
+        });
+        updateSelectedCount();
+    });
+    
+    // Bulk deployment form submission confirmation
+    document.getElementById('bulkDeployForm').addEventListener('submit', function(e) {
+        const selected = document.querySelectorAll('.student-checkbox:checked').length;
+        const templateName = templateSelect.options[templateSelect.selectedIndex].text;
+        
+        if (!confirm(`Deploy VMs using "${templateName}" for ${selected} student(s)? This may take several minutes and VMs will be distributed across multiple nodes for load balancing.`)) {
+            e.preventDefault();
+        }
+    });
+    
+    // Initial count update
+    updateSelectedCount();
+});
+</script>
+{% endblock %}

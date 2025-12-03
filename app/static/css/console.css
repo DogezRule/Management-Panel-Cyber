@@ -1,0 +1,238 @@
+/**
+ * Console Control Panel Styles
+ * Enhanced noVNC interface with Proxmox-style control panel
+ */
+
+/* Responsive Control Panel */
+@media (max-width: 768px) {
+    #control-panel {
+        width: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        z-index: 100;
+        transform: translateX(-100%);
+    }
+    
+    #control-panel.collapsed {
+        transform: translateX(-100%);
+    }
+    
+    #control-panel:not(.collapsed) {
+        transform: translateX(0);
+    }
+    
+    .toggle-panel-btn {
+        right: 10px !important;
+        left: auto !important;
+        border-radius: 8px 0 0 8px !important;
+    }
+    
+    #console-container {
+        width: 100%;
+    }
+}
+
+/* Custom scrollbar for control panel */
+#control-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+#control-panel::-webkit-scrollbar-track {
+    background: #2d3439;
+}
+
+#control-panel::-webkit-scrollbar-thumb {
+    background: #4a5259;
+    border-radius: 3px;
+}
+
+#control-panel::-webkit-scrollbar-thumb:hover {
+    background: #5a616a;
+}
+
+/* Enhanced button states */
+.btn-control {
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-control::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.5s;
+}
+
+.btn-control:hover::before {
+    left: 100%;
+}
+
+.btn-control:active {
+    transform: scale(0.98);
+}
+
+/* Status indicators with animations */
+.status-badge {
+    animation: fadeIn 0.3s ease;
+}
+
+.status-connecting {
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Enhanced teacher controls */
+.teacher-controls {
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.teacher-controls h6 {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Control panel animations */
+.control-section {
+    animation: slideInLeft 0.3s ease forwards;
+}
+
+.control-section:nth-child(1) { animation-delay: 0s; }
+.control-section:nth-child(2) { animation-delay: 0.1s; }
+.control-section:nth-child(3) { animation-delay: 0.2s; }
+.control-section:nth-child(4) { animation-delay: 0.3s; }
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Loading overlay enhancements */
+#loading-overlay {
+    backdrop-filter: blur(3px);
+}
+
+/* VM info cards */
+.vm-info {
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.vm-info:hover {
+    border-color: #4a5259;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Shortcut key styling */
+.shortcut-key {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    border: 1px solid #6c757d;
+}
+
+/* Enhanced checkboxes */
+input[type="checkbox"] {
+    transform: scale(1.1);
+    accent-color: #0d6efd;
+}
+
+/* Focus styles for accessibility */
+.btn-control:focus,
+.toggle-panel-btn:focus,
+input[type="checkbox"]:focus {
+    outline: 2px solid #0d6efd;
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    #control-panel {
+        border-right-color: #ffffff;
+    }
+    
+    .control-section-header {
+        background-color: #000000;
+        color: #ffffff;
+    }
+    
+    .btn-control {
+        border-width: 2px;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Print styles - hide control panel when printing */
+@media print {
+    #control-panel,
+    .toggle-panel-btn,
+    #console-header {
+        display: none !important;
+    }
+    
+    #console-container {
+        width: 100% !important;
+        height: 100vh !important;
+    }
+}
+
+/* Dark mode enhancements */
+@media (prefers-color-scheme: dark) {
+    .vm-info {
+        background-color: #1a1f24;
+    }
+    
+    .teacher-controls {
+        background-color: #2a4f2f;
+        border-color: #3d6642;
+    }
+}
+
+/* Clipboard button styling */
+#clipboard-send-btn {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: white;
+}
+
+#clipboard-send-btn:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+#clipboard-receive-btn {
+    background-color: #198754;
+    border-color: #198754;
+    color: white;
+}
+
+#clipboard-receive-btn:hover {
+    background-color: #157347;
+    border-color: #146c43;
+}

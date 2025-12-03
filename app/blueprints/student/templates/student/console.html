@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VM {{ vm.proxmox_vmid }} Console</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/console.css') }}">
+    <script src="{{ url_for('static', filename='js/console-utils.js') }}" nonce="{{ csp_nonce() }}"></script>
+    <style nonce="{{ csp_nonce() }}">
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #console-header {
+            background-color: #212529;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            z-index: 100;
+            position: relative;
+        }
+        #main-container {
+            height: calc(100vh - 52px);
+            display: flex;
+            background-color: #1a1a1a;
+        }
+        #control-panel {
+            width: 280px;
+            background-color: #2d3439;
+            border-right: 1px solid #4a5259;
+            color: white;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+            z-index: 50;
+        }
+        #control-panel.collapsed {
+            transform: translateX(-280px);
+        }
+        #console-container {
+            flex: 1;
+            position: relative;
+            background-color: #1a1a1a;
+        }
+        #screen {
+            height: 100%;
+            width: 100%;
+        }
+        .control-section {
+            border-bottom: 1px solid #4a5259;
+            padding: 0;
+        }
+        .control-section-header {
+            background-color: #373e44;
+            padding: 12px 16px;
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #4a5259;
+        }
+        .control-section-content {
+            padding: 16px;
+        }
+        .control-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #404650;
+        }
+        .control-item:last-child {
+            border-bottom: none;
+        }
+        .control-label {
+            font-size: 0.85em;
+            color: #e9ecef;
+        }
+        .control-value {
+            font-size: 0.8em;
+            color: #adb5bd;
+        }
+        .btn-control {
+            background-color: #495057;
+            border: 1px solid #6c757d;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            margin: 4px 0;
+        }
+        .btn-control:hover {
+            background-color: #5a6268;
+            border-color: #7d868f;
+        }
+        .btn-control:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background-color: #c82333;
+            border-color: #bd2130;
+        }
+        .btn-success {
+            background-color: #198754;
+            border-color: #198754;
+        }
+        .btn-success:hover:not(:disabled) {
+            background-color: #157347;
+            border-color: #146c43;
+        }
+        .toggle-panel-btn {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #495057;
+            border: 1px solid #6c757d;
+            color: white;
+            width: 32px;
+            height: 48px;
+            border-radius: 0 8px 8px 0;
+            cursor: pointer;
+            z-index: 60;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        #control-panel.collapsed + #console-container .toggle-panel-btn {
+            left: 0;
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            margin-left: 10px;
+        }
+        .status-connected {
+            background-color: #198754;
+        }
+        .status-disconnected {
+            background-color: #dc3545;
+        }
+        .status-connecting {
+            background-color: #fd7e14;
+        }
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(26, 26, 26, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .shortcut-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 0.8em;
+        }
+        .shortcut-key {
+            background-color: #495057;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.75em;
+        }
+        .vm-info {
+            background-color: #1f2429;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+        .vm-info-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+            font-size: 0.8em;
+        }
+        .vm-info-label {
+            color: #adb5bd;
+        }
+        .vm-info-value {
+            color: #e9ecef;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div id="console-header">
+        <div>
+            <h6 class="mb-0">
+                <i class="bi bi-display"></i> VM {{ vm.proxmox_vmid }} Console
+                <span id="status-badge" class="status-badge status-disconnected">Connecting...</span>
+            </h6>
+            <small class="text-muted">{{ student.name }}</small>
+        </div>
+        <div>
+            <a href="{{ url_for('student.dashboard') }}" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+            <a href="{{ url_for('auth.student_logout') }}" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-box-arrow-right"></i> Logout
+            </a>
+        </div>
+    </div>
+    
+    <div id="main-container">
+        <div id="control-panel">
+            <!-- VM Information -->
+            <div class="control-section">
+                <div class="control-section-header">
+                    <i class="bi bi-info-circle"></i> VM Information
+                </div>
+                <div class="control-section-content">
+                    <div class="vm-info">
+                        <div class="vm-info-item">
+                            <span class="vm-info-label">VM ID:</span>
+                            <span class="vm-info-value">{{ vm.proxmox_vmid }}</span>
+                        </div>
+                        <div class="vm-info-item">
+                            <span class="vm-info-label">Student:</span>
+                            <span class="vm-info-value">{{ student.name }}</span>
+                        </div>
+                        <div class="vm-info-item">
+                            <span class="vm-info-label">Status:</span>
+                            <span class="vm-info-value" id="vm-status">{{ vm.status }}</span>
+                        </div>
+                        <div class="vm-info-item">
+                            <span class="vm-info-label">Console:</span>
+                            <span class="vm-info-value" id="console-status">Disconnected</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VM Controls -->
+            <div class="control-section">
+                <div class="control-section-header">
+                    <i class="bi bi-power"></i> VM Controls
+                </div>
+                <div class="control-section-content">
+                    <button id="vm-start" class="btn-control btn-success" onclick="controlVM('start')" disabled>
+                        <i class="bi bi-play-fill"></i> Start VM
+                    </button>
+                    <button id="vm-stop" class="btn-control btn-danger" onclick="controlVM('stop')" disabled>
+                        <i class="bi bi-stop-fill"></i> Stop VM
+                    </button>
+                    <button id="vm-reset" class="btn-control btn-danger" onclick="controlVM('reset')" disabled>
+                        <i class="bi bi-arrow-clockwise"></i> Reset VM
+                    </button>
+                    <button id="vm-refresh" class="btn-control" onclick="refreshStatus()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Status
+                    </button>
+                </div>
+            </div>
+
+            <!-- Console Controls -->
+            <div class="control-section">
+                <div class="control-section-header">
+                    <i class="bi bi-display"></i> Console Options
+                </div>
+                <div class="control-section-content">
+                    <div class="control-item">
+                        <span class="control-label">Scale Viewport</span>
+                        <div>
+                            <input type="checkbox" id="scale-viewport" checked onchange="toggleScaling()">
+                        </div>
+                    </div>
+                    <div class="control-item">
+                        <span class="control-label">Resize Session</span>
+                        <div>
+                            <input type="checkbox" id="resize-session" checked onchange="toggleResize()">
+                        </div>
+                    </div>
+                    <div class="control-item">
+                        <span class="control-label">View Only</span>
+                        <div>
+                            <input type="checkbox" id="view-only" onchange="toggleViewOnly()">
+                        </div>
+                    </div>
+                    <button class="btn-control" onclick="sendCtrlAltDel()">
+                        <i class="bi bi-keyboard"></i> Send Ctrl+Alt+Del
+                    </button>
+                    <button class="btn-control" onclick="reconnectConsole()">
+                        <i class="bi bi-arrow-clockwise"></i> Reconnect Console
+                    </button>
+                    <button id="clipboard-send-btn" class="btn-control" onclick="sendClipboard()" 
+                            title="Send clipboard to VM">
+                        <i class="bi bi-clipboard-plus"></i> Send Clipboard
+                    </button>
+                    <button id="clipboard-receive-btn" class="btn-control" onclick="receiveClipboard()" 
+                            title="Receive clipboard from VM">
+                        <i class="bi bi-clipboard-check"></i> Get Clipboard
+                    </button>
+                </div>
+            </div>
+
+            <!-- Keyboard Shortcuts -->
+            <div class="control-section">
+                <div class="control-section-header">
+                    <i class="bi bi-keyboard"></i> Shortcuts
+                </div>
+                <div class="control-section-content">
+                    <div class="shortcut-item">
+                        <span>Toggle Control Panel</span>
+                        <span class="shortcut-key">Ctrl + /</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span>Full Screen</span>
+                        <span class="shortcut-key">F11</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span>Ctrl+Alt+Del</span>
+                        <span class="shortcut-key">Ctrl + Alt + End</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span>Escape Key</span>
+                        <span class="shortcut-key">Ctrl + Alt + Esc</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span>Send Clipboard</span>
+                        <span class="shortcut-key">Ctrl + Shift + V</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span>Get Clipboard</span>
+                        <span class="shortcut-key">Ctrl + Shift + C</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="console-container">
+            <button class="toggle-panel-btn" onclick="toggleControlPanel()" title="Toggle Control Panel">
+                <i class="bi bi-chevron-left" id="toggle-icon"></i>
+            </button>
+            <div id="loading-overlay">
+                <div class="text-center text-white">
+                    <div class="spinner-border mb-3" role="status"></div>
+                    <div>Connecting to VM console...</div>
+                </div>
+            </div>
+            <div id="screen" data-vm-id="{{ vm.id }}">
+            </div>
+        </div>
+    </div>
+
+    <script type="module" nonce="{{ csp_nonce() }}">
+        import RFB from '/static/vendor/novnc/core/rfb.js';
+        
+        const screenDiv = document.getElementById('screen');
+        let rfb;
+        const statusBadge = document.getElementById('status-badge');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const consoleStatus = document.getElementById('console-status');
+        const vmStatus = document.getElementById('vm-status');
+        const controlPanel = document.getElementById('control-panel');
+        const toggleIcon = document.getElementById('toggle-icon');
+
+        // Global functions for UI controls
+        window.toggleControlPanel = function() {
+            controlPanel.classList.toggle('collapsed');
+            toggleIcon.className = controlPanel.classList.contains('collapsed') 
+                ? 'bi bi-chevron-right' 
+                : 'bi bi-chevron-left';
+        };
+
+        window.toggleScaling = function() {
+            if (rfb) {
+                rfb.scaleViewport = document.getElementById('scale-viewport').checked;
+            }
+        };
+
+        window.toggleResize = function() {
+            if (rfb) {
+                rfb.resizeSession = document.getElementById('resize-session').checked;
+            }
+        };
+
+        window.toggleViewOnly = function() {
+            if (rfb) {
+                rfb.viewOnly = document.getElementById('view-only').checked;
+            }
+        };
+
+        window.sendCtrlAltDel = function() {
+            if (rfb && rfb._rfbConnectionState === 'connected') {
+                rfb.sendCtrlAltDel();
+            }
+        };
+
+        window.reconnectConsole = function() {
+            if (rfb) {
+                rfb.disconnect();
+            }
+            setTimeout(() => {
+                connect();
+            }, 1000);
+        };
+
+        window.sendClipboard = async function() {
+            if (rfb && rfb._rfbConnectionState === 'connected') {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text) {
+                        rfb.clipboardPasteFrom(text);
+                        ConsoleUtils.showNotification('Clipboard sent to VM', 'success');
+                    } else {
+                        ConsoleUtils.showNotification('No clipboard content to send', 'warning');
+                    }
+                } catch (error) {
+                    console.error('Failed to read clipboard:', error);
+                    ConsoleUtils.showNotification('Failed to read clipboard. Please allow clipboard access.', 'error');
+                }
+            } else {
+                ConsoleUtils.showNotification('Not connected to VM console', 'error');
+            }
+        };
+
+        window.receiveClipboard = function() {
+            if (rfb && rfb._rfbConnectionState === 'connected') {
+                // The clipboard data will be received via the clipboard event handler
+                ConsoleUtils.showNotification('Waiting for clipboard from VM...', 'info');
+                ConsoleUtils.showNotification('Use Ctrl+C in the VM to copy text, then check your system clipboard', 'info');
+            } else {
+                ConsoleUtils.showNotification('Not connected to VM console', 'error');
+            }
+        };
+
+        window.controlVM = function(action) {
+            const vmId = screenDiv.dataset.vmId;
+            const buttons = document.querySelectorAll('.btn-control');
+            
+            // Disable all buttons during operation
+            buttons.forEach(btn => btn.disabled = true);
+            
+            ConsoleUtils.handleVMOperation(action, vmId, 
+                (result) => {
+                    // Success callback
+                    setTimeout(() => {
+                        refreshStatus();
+                    }, 2000);
+                },
+                (error) => {
+                    // Error callback - re-enable buttons
+                    updateVMControls();
+                }
+            ).finally(() => {
+                // Re-enable buttons
+                setTimeout(() => updateVMControls(), 1000);
+            });
+        };
+
+        window.refreshStatus = function() {
+            const vmId = screenDiv.dataset.vmId;
+            
+            ConsoleUtils.apiRequest(`/api/vm/${vmId}/status`)
+                .then(result => {
+                    if (result.success) {
+                        vmStatus.textContent = result.status;
+                        updateVMControls(result.status);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching VM status:', error);
+                    ConsoleUtils.showNotification('Failed to fetch VM status', 'warning');
+                });
+        };
+
+        function updateVMControls(status) {
+            const startBtn = document.getElementById('vm-start');
+            const stopBtn = document.getElementById('vm-stop');
+            const resetBtn = document.getElementById('vm-reset');
+            
+            // Enable/disable buttons based on VM status
+            if (status === 'running') {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                resetBtn.disabled = false;
+            } else {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                resetBtn.disabled = true;
+            }
+            
+            // Always enable refresh button
+            document.getElementById('vm-refresh').disabled = false;
+        }
+
+        function updateConnectionStatus(text, state) {
+            statusBadge.textContent = text;
+            consoleStatus.textContent = text;
+            
+            let className = 'status-badge ';
+            switch(state) {
+                case 'connected':
+                    className += 'status-connected';
+                    break;
+                case 'connecting':
+                    className += 'status-connecting';
+                    break;
+                default:
+                    className += 'status-disconnected';
+            }
+            statusBadge.className = className;
+        }
+
+        function connectedToServer() {
+            updateConnectionStatus('Connected', 'connected');
+            loadingOverlay.style.display = 'none';
+            
+            // Update console options to match RFB state
+            document.getElementById('scale-viewport').checked = rfb.scaleViewport;
+            document.getElementById('resize-session').checked = rfb.resizeSession;
+            document.getElementById('view-only').checked = rfb.viewOnly;
+        }
+
+        function disconnectedFromServer(e) {
+            if (e.detail.clean) {
+                updateConnectionStatus('Disconnected', 'disconnected');
+            } else {
+                updateConnectionStatus('Connection failed', 'disconnected');
+            }
+            loadingOverlay.style.display = 'flex';
+            loadingOverlay.querySelector('.text-center').innerHTML = 
+                '<div class="text-danger"><i class="bi bi-x-circle fs-1 mb-3"></i><div>Connection lost. <button class="btn btn-primary btn-sm mt-2" onclick="reconnectConsole()">Reconnect</button></div></div>';
+        }
+
+        async function connect() {
+            const vmId = screenDiv.dataset.vmId;
+            updateConnectionStatus('Connecting...', 'connecting');
+            
+            try {
+                // Connect through Flask WebSocket proxy
+                const url = ConsoleUtils.getWebSocketUrl(vmId);
+                
+                console.log('Connecting to Flask proxy:', url);
+                
+                // Create RFB with empty password - proxy handles VNC auth
+                rfb = new RFB(screenDiv, url, {
+                    credentials: { password: '' },
+                    shared: true
+                });
+
+                rfb.addEventListener('connect', connectedToServer);
+                rfb.addEventListener('disconnect', disconnectedFromServer);
+                
+                // Handle clipboard events
+                rfb.addEventListener('clipboard', function(e) {
+                    if (e.detail.text) {
+                        navigator.clipboard.writeText(e.detail.text).then(() => {
+                            ConsoleUtils.showNotification('Clipboard received from VM', 'success');
+                        }).catch(err => {
+                            console.error('Failed to write to clipboard:', err);
+                            ConsoleUtils.showNotification('Failed to write to system clipboard', 'error');
+                        });
+                    }
+                });
+                
+                // Set default view options
+                rfb.scaleViewport = true;
+                rfb.resizeSession = true;
+                rfb.viewOnly = false;
+                
+            } catch (err) {
+                console.error('Error connecting:', err);
+                updateConnectionStatus('Failed to initialize', 'disconnected');
+                loadingOverlay.querySelector('.text-center').innerHTML = 
+                    `<div class="text-danger"><i class="bi bi-x-circle fs-1 mb-3"></i><div>Error: ${err.message}</div></div>`;
+            }
+        }
+
+        // Initialize keyboard shortcuts
+        const shortcuts = new KeyboardShortcuts();
+        shortcuts.register('ctrl+/', toggleControlPanel);
+        shortcuts.register('ctrl+alt+end', sendCtrlAltDel);
+        shortcuts.register('ctrl+shift+v', sendClipboard);
+        shortcuts.register('ctrl+shift+c', receiveClipboard);
+        shortcuts.register('f11', () => {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen();
+            }
+        });
+
+        // Initialize
+        connect();
+        refreshStatus();
+        updateVMControls();
+    </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Class{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Import New Class</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('teacher.import_class') }}">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            {{ form.class_name.label(class="form-label") }}
+                            {{ form.class_name(class="form-control" + (" is-invalid" if form.class_name.errors else ""), placeholder="e.g., CS 101 Fall 2025") }}
+                            {% if form.class_name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.class_name.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.students_text.label(class="form-label") }}
+                            {{ form.students_text(class="form-control" + (" is-invalid" if form.students_text.errors else ""), rows=10, placeholder="John Smith\nJane Doe\nBob Johnson") }}
+                            {% if form.students_text.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.students_text.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                Enter one student name per line. Usernames & initial passwords will be generated automatically.
+                            </small>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <strong>Note:</strong> This will:
+                            <ul class="mb-0 mt-2">
+                                <li>Create student usernames and initial passwords</li>
+                                <li>Allow you to deploy VMs for each student</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-secondary">Cancel</a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
