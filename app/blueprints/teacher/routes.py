@@ -8,9 +8,7 @@ from ...extensions import db
 from ...security import teacher_required
 from ...services.vm_orchestrator import (
     deploy_vm_for_student,
-    delete_vm,
-    get_proxmox_client,
-    stop_vm_for_student
+    get_proxmox_client
 )
 import re
 import secrets

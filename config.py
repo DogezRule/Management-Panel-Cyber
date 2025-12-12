@@ -14,8 +14,9 @@ class Config:
     PROXMOX_USER = os.getenv('PROXMOX_USER')
     PROXMOX_TOKEN_NAME = os.getenv('PROXMOX_TOKEN_NAME')
     PROXMOX_TOKEN_VALUE = os.getenv('PROXMOX_TOKEN_VALUE')
+    PROXMOX_PASSWORD = os.getenv('PROXMOX_PASSWORD')
     PROXMOX_SSH_HOST = os.getenv('PROXMOX_SSH_HOST')
-    PROXMOX_SSH_USER = os.getenv('PROXMOX_SSH_USER')
+    PROXMOX_SSH_USER = os.getenv('PROXMOX_SSH_USER', 'root')
     PROXMOX_SSH_KEY_PATH = os.getenv('PROXMOX_SSH_KEY_PATH')
     
     
@@ -45,8 +46,8 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = os.getenv('REMEMBER_COOKIE_HTTPONLY', 'True') == 'True'
     PREFERRED_URL_SCHEME = os.getenv('PREFERRED_URL_SCHEME', 'https')
 
-    # Rate limiting (Flask-Limiter)
-    RATELIMIT_DEFAULT = os.getenv('RATELIMIT_DEFAULT', '200 per day;50 per hour')
+    # Rate limiting (Flask-Limiter) - increased for testing
+    RATELIMIT_DEFAULT = os.getenv('RATELIMIT_DEFAULT', '10000 per day;1000 per hour')
     RATELIMIT_STORAGE_URI = os.getenv('RATELIMIT_STORAGE_URI', 'memory://')
 
     # Content Security Policy for Talisman. Modify as necessary for your app.
@@ -55,7 +56,7 @@ class Config:
         'script-src': ["'self'"],
         'style-src': ["'self'"],
         'img-src': ["'self'", 'data:'],
-        'connect-src': ["'self'"],
+        'connect-src': ["'self'", 'https:', 'wss:', 'ws:'],  # Allow same-origin + WebSocket + HTTPS for API
     }
     # Whether the app should redirect HTTP to HTTPS. Disable if terminating TLS at a proxy
     SSL_REDIRECT = os.getenv('SSL_REDIRECT', 'True') == 'True'

@@ -124,42 +124,41 @@ class VirtualMachine(db.Model):
 
 
 class VMTemplate(db.Model):
-    """VM Template definitions"""
+    """VM Template definitions with per-node VMID mapping"""
     __tablename__ = 'vm_templates'
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False, unique=True)
-    proxmox_template_id = db.Column(db.Integer, nullable=False)
-    proxmox_node = db.Column(db.String(120), nullable=False)  # Primary node where template was created
     description = db.Column(db.Text)
     memory = db.Column(db.Integer, default=2048)
     cores = db.Column(db.Integer, default=2)
     is_active = db.Column(db.Boolean, default=True)
-    replicate_to_all_nodes = db.Column(db.Boolean, default=True)  # Auto-replicate to all nodes
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
-    replicas = db.relationship('VMTemplateReplica', backref='template', lazy='dynamic', cascade='all, delete-orphan')
+    # Relationships to per-node template mappings
+    node_vmids = db.relationship('TemplateNodeMapping', backref='template', lazy='dynamic', cascade='all, delete-orphan')
     
     def get_template_id_for_node(self, node_name: str) -> int:
-        """Get the template ID to use for a specific node"""
-        if self.proxmox_node == node_name:
-            return self.proxmox_template_id
-        
-        # Look for a replica on the target node
-        replica = self.replicas.filter_by(target_node=node_name).first()
-        if replica and replica.is_ready:
-            return replica.template_id
-        
-        # Fallback to original if no replica found
-        return self.proxmox_template_id
+        """Get the template VMID for a specific node"""
+        mapping = self.node_vmids.filter_by(proxmox_node=node_name).first()
+        if not mapping:
+            raise RuntimeError(
+                f"Template '{self.name}' is not registered on node '{node_name}'. "
+                f"Available nodes: {', '.join([m.proxmox_node for m in self.node_vmids.all()])}"
+            )
+        return mapping.proxmox_template_id
+    
+    def get_available_nodes(self):
+        """Get list of nodes where this template is available"""
+        return [m.proxmox_node for m in self.node_vmids.all()]
     
     def __repr__(self):
         return f'<VMTemplate {self.name}>'
 
 
 class VMTemplateReplica(db.Model):
-    """Tracks template replicas across nodes"""
+    """DEPRECATED: Per-node template mappings (replaced by TemplateNodeMapping)"""
     __tablename__ = 'vm_template_replicas'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -175,6 +174,24 @@ class VMTemplateReplica(db.Model):
     
     def __repr__(self):
         return f'<VMTemplateReplica {self.template_id} -> {self.target_node}>'
+
+
+class TemplateNodeMapping(db.Model):
+    """Maps VM template to its VMID on each Proxmox node"""
+    __tablename__ = 'template_node_mappings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('vm_templates.id'), nullable=False)
+    proxmox_node = db.Column(db.String(120), nullable=False)
+    proxmox_template_id = db.Column(db.Integer, nullable=False)  # Template VMID on this specific node
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Unique constraint: one mapping per template per node
+    __table_args__ = (db.UniqueConstraint('template_id', 'proxmox_node', name='uq_template_node'),)
+    
+    def __repr__(self):
+        return f'<TemplateNodeMapping template={self.template_id} node={self.proxmox_node} vmid={self.proxmox_template_id}>'
 
 
 class NodeConfiguration(db.Model):

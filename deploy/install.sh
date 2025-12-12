@@ -127,17 +127,30 @@ EOF
 echo "==> Writing Caddyfile to /etc/caddy/Caddyfile"
 CADDYFILE_PATH="/etc/caddy/Caddyfile"
 sudo bash -c "cat > '$CADDYFILE_PATH'" <<EOF
-$DOMAIN, :443 {
-    encode zstd gzip
-    @ws {
+${DOMAIN}, :443 {
+    # Dedicated WebSocket route to keep the VNC stream untouched
+    @vnc_ws {
         path /vnc-proxy/ws/*
     }
-    reverse_proxy @ws unix//run/cyberlab-admin/gunicorn.sock {
+    reverse_proxy @vnc_ws unix//run/cyberlab-admin/gunicorn.sock {
+        # Force plain HTTP/1.1 for WebSockets and disable buffering
         transport http {
-            versions h2c 1.1
+            versions 1.1
         }
+        flush_interval -1
+        header_up Host {http.request.host}
+        header_up X-Forwarded-Proto {http.request.scheme}
+        header_up Connection {>Connection}
+        header_up Upgrade {>Upgrade}
     }
-    reverse_proxy unix//run/cyberlab-admin/gunicorn.sock
+
+    # Everything else can stay compressed and cached-friendly
+    @http_routes {
+        not path /vnc-proxy/ws/*
+    }
+    encode zstd gzip @http_routes
+    reverse_proxy @http_routes unix//run/cyberlab-admin/gunicorn.sock
+
     tls internal
 }
 EOF

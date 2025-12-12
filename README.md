@@ -38,6 +38,8 @@ A production-ready administrative panel for managing Proxmox VE virtual machines
    PROXMOX_USER=root@pam
    PROXMOX_TOKEN_NAME=your-token-name
    PROXMOX_TOKEN_VALUE=your-token-value
+   PROXMOX_VERIFY_SSL=False  # Set True if using trusted certificates
+   PROXMOX_API_TIMEOUT=30
    ```
 
 4. **Access application:**
@@ -82,6 +84,8 @@ PROXMOX_HOST=https://proxmox-server:8006
 PROXMOX_USER=root@pam
 PROXMOX_TOKEN_NAME=admin-panel
 PROXMOX_TOKEN_VALUE=your-api-token
+PROXMOX_VERIFY_SSL=False
+PROXMOX_API_TIMEOUT=30
 
 # VM settings
 MAX_VMS_PER_NODE=12

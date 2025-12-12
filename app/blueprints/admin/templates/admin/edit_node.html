@@ -13,68 +13,72 @@
                 <div class="card-body">
                     <form method="POST" action="{{ url_for('admin.edit_node', node_id=node.id) }}">
                         {{ form.hidden_tag() }}
+                        <!-- Hidden field: list of picked storages -->
+                        <input type="hidden" name="selected_storages" id="selectedStoragesInput" value="">
 
-                        <!-- Node name (read-only) -->
                         <div class="mb-3">
                             {{ form.node_name.label(class="form-label") }}
-                            {{ form.node_name(class="form-control", readonly=true) }}
-                            <small class="form-text text-muted">
-                                Node name cannot be changed.
-                            </small>
+                            {{ form.node_name(class="form-control" + (" is-invalid" if form.node_name.errors else ""), readonly=true) }}
+                            {% if form.node_name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.node_name.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">Node name cannot be changed</small>
                         </div>
-
-                        <!-- Max VMs + Priority -->
+                        
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 {{ form.max_vms.label(class="form-label") }}
-                                {{ form.max_vms(class="form-control") }}
-                                <small class="form-text text-muted">
-                                    Current: {{ node.get_current_vm_count() }} VMs
-                                </small>
+                                {{ form.max_vms(class="form-control" + (" is-invalid" if form.max_vms.errors else "")) }}
+                                {% if form.max_vms.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.max_vms.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">Current: {{ node.get_current_vm_count() }} VMs</small>
                             </div>
-
+                            
                             <div class="col-md-6 mb-3">
                                 {{ form.priority.label(class="form-label") }}
-                                {{ form.priority(class="form-control") }}
-                                <small class="form-text text-muted">
-                                    Higher priority = preferred for deployment.
-                                </small>
+                                {{ form.priority(class="form-control" + (" is-invalid" if form.priority.errors else "")) }}
+                                {% if form.priority.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.priority.errors %}{{ error }}{% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">Higher priority = preferred for deployment</small>
                             </div>
                         </div>
-
-                        <!-- Storage selector and picker -->
+                        
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 {{ form.storage_pools.label(class="form-label mb-0") }}
-                                <button type="button"
-                                        id="refreshStoragesBtn"
-                                        class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-arrow-clockwise"></i>
-                                    Refresh from Proxmox
+                                <button type="button" id="refreshStoragesBtn" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh from Proxmox
                                 </button>
                             </div>
-
-                            {{ form.storage_pools(class="form-control") }}
+                            {{ form.storage_pools(class="form-control" + (" is-invalid" if form.storage_pools.errors else "")) }}
+                            {% if form.storage_pools.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.storage_pools.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
                             <small class="form-text text-muted">
-                                List one or more storage pools (comma-separated).
-                                New clones will be balanced across them.
+                                List one or more storage pools (comma-separated). New clones will be balanced across them.
                             </small>
 
-                            <!-- Hidden picker, revealed via JS -->
-                            <div id="storagesPicker" class="mt-2 d-none">
-                                <div class="small text-muted mb-1">
-                                    Available storages on this node:
-                                </div>
+                            <div id="storagesPicker" class="mt-2">
+                                <div class="small text-muted mb-1">Available storages on this node:</div>
+                                <!-- Checkboxes get injected here -->
                                 <div id="storagesList" class="mt-2"></div>
-                                <button type="button"
-                                        id="applyStoragesBtn"
+                                <button type="button" id="applyStoragesBtn"
                                         class="btn btn-sm btn-secondary mt-2">
                                     Add selected storages
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Storage weights and limits table -->
                         <div class="mb-3">
                             <h6>Storage weights and limits</h6>
                             <div class="table-responsive">
@@ -82,47 +86,32 @@
                                     <thead>
                                         <tr>
                                             <th>Storage</th>
-                                            <th class="w-25">Weight</th>
-                                            <th class="w-25">Max VMs (per storage)</th>
-                                            <th class="w-auto">Active</th>
+                                            <th style="width: 140px;">Weight</th>
+                                            <th style="width: 180px;">Max VMs (per storage)</th>
+                                            <th style="width: 100px;">Active</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {% for s in node.storages.order_by('name').all() %}
                                         <tr>
                                             <td>
-                                                <input type="hidden"
-                                                       name="storage_name"
-                                                       value="{{ s.name }}">
+                                                <input type="hidden" name="storage_name" value="{{ s.name }}">
                                                 <code>{{ s.name }}</code>
                                             </td>
                                             <td>
-                                                <input type="number"
-                                                       min="0"
-                                                       name="storage_weight"
-                                                       class="form-control"
-                                                       value="{{ s.weight }}" />
+                                                <input type="number" min="0" name="storage_weight" class="form-control" value="{{ s.weight }}" />
                                             </td>
                                             <td>
-                                                <input type="number"
-                                                       min="0"
-                                                       name="storage_max_vms"
-                                                       class="form-control"
-                                                       value="{{ s.max_vms or '' }}"
-                                                       placeholder="Unlimited" />
+                                                <input type="number" min="0" name="storage_max_vms" class="form-control" value="{{ s.max_vms or '' }}" placeholder="Unlimited" />
                                             </td>
                                             <td>
-                                                <input type="checkbox"
-                                                       name="storage_active"
-                                                       class="form-check-input"
-                                                       {% if s.active %}checked{% endif %} />
+                                                <input type="checkbox" name="storage_active" class="form-check-input" {% if s.active %}checked{% endif %} />
                                             </td>
                                         </tr>
                                         {% else %}
                                         <tr>
                                             <td colspan="4" class="text-muted">
-                                                No storages configured for this node yet.
-                                                Use the refresh button above to load storages from Proxmox.
+                                                No storages configured for this node. Use the refresh button above to add storages from Proxmox.
                                             </td>
                                         </tr>
                                         {% endfor %}
@@ -130,25 +119,17 @@
                                 </table>
                             </div>
                         </div>
-
-                        <!-- Node active toggle -->
+                        
                         <div class="mb-3 form-check">
                             {{ form.is_active(class="form-check-input") }}
                             {{ form.is_active.label(class="form-check-label") }}
-                            <small class="form-text text-muted d-block">
-                                Only active nodes will be used for VM deployment.
-                            </small>
+                            <small class="form-text text-muted d-block">Only active nodes will be used for VM deployment</small>
                         </div>
-
-                        <!-- Actions -->
+                        
                         <div class="d-flex justify-content-between">
-                            <a href="{{ url_for('admin.nodes') }}"
-                               class="btn btn-secondary">
-                                Cancel
-                            </a>
+                            <a href="{{ url_for('admin.nodes') }}" class="btn btn-secondary">Cancel</a>
                             {{ form.submit(class="btn btn-primary") }}
                         </div>
-
                     </form>
                 </div>
             </div>
@@ -158,88 +139,58 @@
 {% endblock %}
 
 {% block extra_js %}
-{{ super() }}
 <script nonce="{{ csp_nonce() }}">
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function() {
     const refreshBtn = document.getElementById('refreshStoragesBtn');
     const storagesPicker = document.getElementById('storagesPicker');
     const storagesList = document.getElementById('storagesList');
     const applyBtn = document.getElementById('applyStoragesBtn');
     const poolsInput = document.getElementById('{{ form.storage_pools.id }}');
-
-    const storagesUrl = "{{ url_for('admin.api_node_storages', node_name=node.node_name) }}";
-    console.log("Edit node page loaded for:", "{{ node.node_name }}");
-    console.log("Storages API URL:", storagesUrl);
+    const selectedStoragesInput = document.getElementById('selectedStoragesInput');
+    const nodeName = '{{ node.node_name }}';
 
     function updatePoolsFromChecks() {
-        const checks = storagesList.querySelectorAll('input[type="checkbox"]:checked');
+        const checks = storagesList.querySelectorAll('input[type=checkbox]:checked');
         const values = Array.from(checks).map(cb => cb.value);
-        poolsInput.value = values.join(', ');
-        console.log("Selected storages now:", poolsInput.value);
+        const csv = values.join(', ');
+        poolsInput.value = csv;
+        selectedStoragesInput.value = csv;
     }
 
     applyBtn.addEventListener('click', updatePoolsFromChecks);
 
-    refreshBtn.addEventListener('click', async function () {
-        console.log("Refresh button clicked");
+    refreshBtn.addEventListener('click', async function() {
         refreshBtn.disabled = true;
-        refreshBtn.innerHTML =
-            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...';
-
+        refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...';
         try {
-            console.log("Fetching storages from:", storagesUrl);
-            const resp = await fetch(storagesUrl);
-            console.log("HTTP status:", resp.status);
-
+            const url = "{{ url_for('admin.api_node_storages', node_name='__NODE__') }}".replace(
+                '__NODE__',
+                encodeURIComponent(nodeName)
+            );
+            const resp = await fetch(url);
             const data = await resp.json();
-            console.log("API response JSON:", data);
-
-            if (!data.ok) {
-                throw new Error(data.error || 'API returned ok=false');
-            }
+            if (!data.ok) throw new Error(data.error || 'Failed to fetch storages');
 
             storagesList.innerHTML = '';
 
             if (!data.storages || data.storages.length === 0) {
-                console.log("No storages returned from API");
-                const span = document.createElement('span');
-                span.className = 'text-muted';
-                span.textContent = 'No storages found on this node.';
-                storagesList.appendChild(span);
+                storagesList.innerHTML = '<span class="text-muted">No storages found on this node.</span>';
             } else {
-                console.log("Storages returned:", data.storages);
-                const preselected = (poolsInput.value || '')
-                    .split(',')
-                    .map(x => x.trim())
-                    .filter(Boolean);
-
+                const preselected = (poolsInput.value || '').split(',').map(x => x.trim());
                 data.storages.forEach(s => {
+                    const id = `stg_${s.name}`;
                     const wrapper = document.createElement('div');
                     wrapper.className = 'form-check form-check-inline';
-
-                    const input = document.createElement('input');
-                    input.className = 'form-check-input';
-                    input.type = 'checkbox';
-                    input.value = s.name;
-
-                    if (preselected.includes(s.name) || s.active) {
-                        input.checked = true;
-                    }
-
-                    const label = document.createElement('label');
-                    label.className = 'form-check-label';
-                    label.textContent = s.name;
-
-                    wrapper.appendChild(input);
-                    wrapper.appendChild(label);
+                    const checked = preselected.includes(s.name) || s.active;
+                    wrapper.innerHTML = `
+                        <input class="form-check-input" type="checkbox" id="${id}" value="${s.name}" ${checked ? 'checked' : ''}>
+                        <label class="form-check-label" for="${id}">${s.name}</label>
+                    `;
                     storagesList.appendChild(wrapper);
                 });
             }
-
             storagesPicker.classList.remove('d-none');
-
         } catch (e) {
-            console.error("Error while fetching storages:", e);
             alert('Error loading storages: ' + e.message);
         } finally {
             refreshBtn.disabled = false;

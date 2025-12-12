@@ -240,7 +240,7 @@
             <small class="text-muted">{{ vm.student.name }} - {{ vm.student.classroom.name }}</small>
         </div>
         <div>
-            <button onclick="window.close()" class="btn btn-outline-light btn-sm">
+            <button id="close-btn" class="btn btn-outline-light btn-sm">
                 <i class="bi bi-x-lg"></i> Close
             </button>
         </div>
@@ -287,27 +287,27 @@
                 <div class="control-section-content">
                     <div class="teacher-controls">
                         <h6><i class="bi bi-power"></i> Power Management</h6>
-                        <button id="vm-start" class="btn-control btn-success" onclick="controlVM('start')" disabled>
+                        <button id="vm-start" class="btn-control btn-success" disabled>
                             <i class="bi bi-play-fill"></i> Start VM
                         </button>
-                        <button id="vm-stop" class="btn-control btn-danger" onclick="controlVM('stop')" disabled>
+                        <button id="vm-stop" class="btn-control btn-danger" disabled>
                             <i class="bi bi-stop-fill"></i> Stop VM
                         </button>
-                        <button id="vm-reset" class="btn-control btn-danger" onclick="controlVM('reset')" disabled>
+                        <button id="vm-reset" class="btn-control btn-danger" disabled>
                             <i class="bi bi-arrow-clockwise"></i> Reset VM
                         </button>
-                        <button id="vm-suspend" class="btn-control btn-warning" onclick="controlVM('suspend')" disabled>
+                        <button id="vm-suspend" class="btn-control btn-warning" disabled>
                             <i class="bi bi-pause-fill"></i> Suspend VM
                         </button>
-                        <button id="vm-resume" class="btn-control btn-success" onclick="controlVM('resume')" disabled>
+                        <button id="vm-resume" class="btn-control btn-success" disabled>
                             <i class="bi bi-play"></i> Resume VM
                         </button>
                     </div>
                     
-                    <button id="vm-refresh" class="btn-control" onclick="refreshStatus()">
+                    <button id="vm-refresh" class="btn-control">
                         <i class="bi bi-arrow-clockwise"></i> Refresh Status
                     </button>
-                    <button class="btn-control" onclick="openStudentDashboard()">
+                    <button id="view-student-profile" class="btn-control">
                         <i class="bi bi-person"></i> View Student Profile
                     </button>
                 </div>
@@ -322,42 +322,40 @@
                     <div class="control-item">
                         <span class="control-label">Scale Viewport</span>
                         <div>
-                            <input type="checkbox" id="scale-viewport" checked onchange="toggleScaling()">
+                            <input type="checkbox" id="scale-viewport" checked>
                         </div>
                     </div>
                     <div class="control-item">
                         <span class="control-label">Resize Session</span>
                         <div>
-                            <input type="checkbox" id="resize-session" checked onchange="toggleResize()">
+                            <input type="checkbox" id="resize-session" checked>
                         </div>
                     </div>
                     <div class="control-item">
                         <span class="control-label">View Only</span>
                         <div>
-                            <input type="checkbox" id="view-only" onchange="toggleViewOnly()">
+                            <input type="checkbox" id="view-only">
                         </div>
                     </div>
                     <div class="control-item">
                         <span class="control-label">Show Dot Cursor</span>
                         <div>
-                            <input type="checkbox" id="dot-cursor" onchange="toggleDotCursor()">
+                            <input type="checkbox" id="dot-cursor">
                         </div>
                     </div>
-                    <button class="btn-control" onclick="sendCtrlAltDel()">
+                    <button id="send-ctrl-alt-del" class="btn-control">
                         <i class="bi bi-keyboard"></i> Send Ctrl+Alt+Del
                     </button>
-                    <button class="btn-control" onclick="takeScreenshot()">
+                    <button id="take-screenshot" class="btn-control">
                         <i class="bi bi-camera"></i> Take Screenshot
                     </button>
-                    <button class="btn-control" onclick="reconnectConsole()">
+                    <button id="reconnect-console" class="btn-control">
                         <i class="bi bi-arrow-clockwise"></i> Reconnect Console
                     </button>
-                    <button id="clipboard-send-btn" class="btn-control" onclick="sendClipboard()" 
-                            title="Send clipboard to VM">
+                    <button id="clipboard-send-btn" class="btn-control" title="Send clipboard to VM">
                         <i class="bi bi-clipboard-plus"></i> Send Clipboard
                     </button>
-                    <button id="clipboard-receive-btn" class="btn-control" onclick="receiveClipboard()" 
-                            title="Receive clipboard from VM">
+                    <button id="clipboard-receive-btn" class="btn-control" title="Receive clipboard from VM">
                         <i class="bi bi-clipboard-check"></i> Get Clipboard
                     </button>
                 </div>
@@ -402,7 +400,7 @@
         </div>
 
         <div id="console-container">
-            <button class="toggle-panel-btn" onclick="toggleControlPanel()" title="Toggle Control Panel">
+            <button id="toggle-control-panel" class="toggle-panel-btn" title="Toggle Control Panel">
                 <i class="bi bi-chevron-left" id="toggle-icon"></i>
             </button>
             <div id="loading-overlay">
@@ -640,7 +638,9 @@
             }
             loadingOverlay.style.display = 'flex';
             loadingOverlay.querySelector('.text-center').innerHTML = 
-                '<div class="text-danger"><i class="bi bi-x-circle fs-1 mb-3"></i><div>Connection lost. <button class="btn btn-primary btn-sm mt-2" onclick="reconnectConsole()">Reconnect</button></div></div>';
+                '<div class="text-danger"><i class="bi bi-x-circle fs-1 mb-3"></i><div>Connection lost. <button id="error-reconnect-btn" class="btn btn-primary btn-sm mt-2">Reconnect</button></div></div>';
+            // Add event listener to the reconnect button
+            document.getElementById('error-reconnect-btn')?.addEventListener('click', () => reconnectConsole());
         }
 
         async function connect() {
@@ -651,7 +651,7 @@
                 // Connect through Flask WebSocket proxy
                 const url = ConsoleUtils.getWebSocketUrl(vmId);
                 
-                console.log('Connecting to Flask proxy:', url);
+                console.log('Connecting via Flask proxy:', url);
                 
                 // Create RFB with empty password - proxy handles VNC auth
                 rfb = new RFB(screenDiv, url, {
@@ -688,6 +688,28 @@
             }
         }
 
+        // Event listeners for buttons
+        document.getElementById('close-btn')?.addEventListener('click', () => window.close());
+        document.getElementById('vm-start')?.addEventListener('click', () => controlVM('start'));
+        document.getElementById('vm-stop')?.addEventListener('click', () => controlVM('stop'));
+        document.getElementById('vm-reset')?.addEventListener('click', () => controlVM('reset'));
+        document.getElementById('vm-suspend')?.addEventListener('click', () => controlVM('suspend'));
+        document.getElementById('vm-resume')?.addEventListener('click', () => controlVM('resume'));
+        document.getElementById('vm-refresh')?.addEventListener('click', () => refreshStatus());
+        document.getElementById('view-student-profile')?.addEventListener('click', () => openStudentDashboard());
+        document.getElementById('send-ctrl-alt-del')?.addEventListener('click', () => sendCtrlAltDel());
+        document.getElementById('take-screenshot')?.addEventListener('click', () => takeScreenshot());
+        document.getElementById('reconnect-console')?.addEventListener('click', () => reconnectConsole());
+        document.getElementById('clipboard-send-btn')?.addEventListener('click', () => sendClipboard());
+        document.getElementById('clipboard-receive-btn')?.addEventListener('click', () => receiveClipboard());
+        document.getElementById('toggle-control-panel')?.addEventListener('click', () => toggleControlPanel());
+        
+        // Checkbox event listeners for console options
+        document.getElementById('scale-viewport')?.addEventListener('change', () => toggleScaling());
+        document.getElementById('resize-session')?.addEventListener('change', () => toggleResize());
+        document.getElementById('view-only')?.addEventListener('change', () => toggleViewOnly());
+        document.getElementById('dot-cursor')?.addEventListener('change', () => toggleDotCursor());
+
         // Keyboard shortcuts
         document.addEventListener('keydown', function(event) {
             // Ctrl + / to toggle control panel
@@ -719,7 +741,7 @@
 
         // Initialize
         connect();
-        refreshStatus();
+        // refreshStatus(); // Temporarily disabled - SSH timeout issue
         updateVMControls();
     </script>
 </body>

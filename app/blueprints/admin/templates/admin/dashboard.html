@@ -83,9 +83,9 @@
                                 <td>{{ teacher.created_at.strftime('%Y-%m-%d') }}</td>
                                 <td>
                                     <div class="btn-group" role="group">
-                                        <form method="POST" action="{{ url_for('admin.delete_teacher', teacher_id=teacher.id) }}" class="m-0 p-0">
+                                        <form method="POST" action="{{ url_for('admin.delete_teacher', teacher_id=teacher.id) }}" class="m-0 p-0" onsubmit="return confirm('Delete this teacher and all related classes and VMs?')">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" autocomplete="off">
-                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete teacher" onclick="return confirm('Delete this teacher and all related classes and VMs?')">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete teacher">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </form>
@@ -157,11 +157,10 @@
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Template ID</th>
-                                <th>Primary Node</th>
+                                <th>Available Nodes</th>
                                 <th>Memory</th>
                                 <th>Cores</th>
-                                <th>Multi-Node</th>
+                                <th>Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -169,28 +168,30 @@
                             {% for template in templates %}
                             <tr>
                                 <td><strong>{{ template.name }}</strong></td>
-                                <td><code>{{ template.proxmox_template_id }}</code></td>
-                                <td>{{ template.proxmox_node }}</td>
+                                <td>
+                                    {% set available_nodes = template.get_available_nodes() %}
+                                    {% if available_nodes %}
+                                        {% for node in available_nodes %}
+                                            <span class="badge bg-info">{{ node }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">No nodes configured</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ template.memory }} MB</td>
                                 <td>{{ template.cores }}</td>
                                 <td>
-                                    {% if template.replicate_to_all_nodes %}
-                                        <span class="badge bg-success">Auto-replicated</span>
+                                    {% if template.is_active %}
+                                        <span class="badge bg-success">Active</span>
                                     {% else %}
-                                        <span class="badge bg-secondary">Single node</span>
+                                        <span class="badge bg-secondary">Inactive</span>
                                     {% endif %}
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
-                                        <form method="POST" action="{{ url_for('admin.replicate_template', template_id=template.id) }}" style="display: inline;">
+                                        <form method="POST" action="{{ url_for('admin.delete_template', template_id=template.id) }}" style="display: inline;" onsubmit="return confirm('Delete this template?')">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button type="submit" class="btn btn-sm btn-outline-primary" title="Replicate to all nodes">
-                                                <i class="bi bi-arrow-repeat"></i>
-                                            </button>
-                                        </form>
-                                        <form method="POST" action="{{ url_for('admin.delete_template', template_id=template.id) }}" style="display: inline;">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this template?')">
+                                            <button type="submit" class="btn btn-sm btn-danger">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </form>

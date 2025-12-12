@@ -11,6 +11,8 @@ class ConsoleUtils {
 
     static async apiRequest(url, options = {}) {
         const defaultOptions = {
+            method: 'GET',
+            credentials: 'same-origin',  // IMPORTANT: Include cookies for same-origin requests
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': this.getCsrfToken()
@@ -28,7 +30,25 @@ class ConsoleUtils {
 
         try {
             const response = await fetch(url, mergedOptions);
-            return await response.json();
+            
+            // Check if response is ok (2xx status)
+            if (!response.ok) {
+                const contentType = response.headers.get('content-type');
+                let errorData;
+                if (contentType && contentType.includes('application/json')) {
+                    errorData = await response.json();
+                } else {
+                    errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+                }
+                throw new Error(JSON.stringify(errorData));
+            }
+            
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return await response.json();
+            } else {
+                return { error: 'Invalid response format (expected JSON)' };
+            }
         } catch (error) {
             console.error('API request failed:', error);
             throw error;

@@ -4,13 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Server socket - using HTTP binding for reverse proxy
-bind = "127.0.0.1:8000"
+# Server socket - use a Unix domain socket so Caddy can proxy on /run/cyberlab-admin/gunicorn.sock
+bind = "unix:/run/cyberlab-admin/gunicorn.sock"
 backlog = 2048
 
 # Worker processes
 workers = 2
-worker_class = 'sync'
+threads = 4
+worker_class = 'gthread'
 worker_connections = 1000
 max_requests = 1000
 max_requests_jitter = 50

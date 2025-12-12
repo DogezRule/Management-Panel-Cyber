@@ -1,14 +1,9 @@
-Cybersecurity.local {
-    encode zstd gzip
-    @ws {
-        path /vnc-proxy/ws/*
+cybersecurity.local, :443 {
+    reverse_proxy /vnc-proxy/ws/* unix//run/cyberlab-admin/gunicorn.sock {
+        flush_interval -1
     }
-    reverse_proxy @ws 127.0.0.1:8000 {
-        transport http {
-            versions h2c 1.1
-        }
-    }
-    reverse_proxy 127.0.0.1:8000
-    # Use Caddy's internal CA for issuing TLS certs (local PKI)
+
+    reverse_proxy unix//run/cyberlab-admin/gunicorn.sock
+
     tls internal
 }

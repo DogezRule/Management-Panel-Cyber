@@ -34,9 +34,9 @@
                     <a href="{{ url_for('teacher.class_detail', class_id=classroom.id) }}" class="btn btn-primary btn-sm">
                         View Details
                     </a>
-                    <form method="POST" action="{{ url_for('teacher.delete_class', class_id=classroom.id) }}" style="display: inline;">
+                    <form method="POST" action="{{ url_for('teacher.delete_class', class_id=classroom.id) }}" style="display: inline;" onsubmit="return confirm('Delete this class and all its students/VMs?')">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this class and all its students/VMs?')">
+                        <button type="submit" class="btn btn-danger btn-sm">
                             <i class="bi bi-trash"></i> Delete
                         </button>
                     </form>

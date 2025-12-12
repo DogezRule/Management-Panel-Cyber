@@ -11,9 +11,9 @@
         </div>
         <div class="col-auto">
             <div class="d-flex gap-2 align-items-center">
-                <form method="POST" action="{{ url_for('teacher.class_bulk_vm_cleanup', class_id=classroom.id) }}" class="d-inline">
+                <form method="POST" action="{{ url_for('teacher.class_bulk_vm_cleanup', class_id=classroom.id) }}" class="d-inline" onsubmit="return confirm('Stop and delete ALL VMs in this class? This cannot be undone.')">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <button type="submit" class="btn btn-danger" onclick="return confirm('Stop and delete ALL VMs in this class? This cannot be undone.')">
+                    <button type="submit" class="btn btn-danger">
                         <i class="bi bi-exclamation-triangle"></i> Remove All VMs
                     </button>
                 </form>
@@ -141,9 +141,9 @@
                                 </form>
                                 
                                 <!-- Delete student button -->
-                                <form method="POST" action="{{ url_for('teacher.delete_student', student_id=data.student.id) }}" class="d-inline">
+                                <form method="POST" action="{{ url_for('teacher.delete_student', student_id=data.student.id) }}" class="d-inline" onsubmit="return confirm('Delete {{ data.student.name }} and all their VMs?')">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete {{ data.student.name }} and all their VMs?')">
+                                    <button type="submit" class="btn btn-danger btn-sm">
                                         <i class="bi bi-trash"></i> Delete Student
                                     </button>
                                 </form>
@@ -188,10 +188,9 @@
                                     {% endif %}
                                     
                                     <!-- Delete VM button -->
-                                    <form method="POST" action="{{ url_for('teacher.delete_vm_route', vm_id=vm.id) }}" class="flex-fill">
+                                    <form method="POST" action="{{ url_for('teacher.delete_vm_route', vm_id=vm.id) }}" class="flex-fill" onsubmit="return confirm('Delete VM {{ vm.proxmox_vmid }}?')">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <button type="submit" class="btn btn-danger btn-sm w-100" 
-                                                onclick="return confirm('Delete VM {{ vm.proxmox_vmid }}?')">
+                                        <button type="submit" class="btn btn-danger btn-sm w-100">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </form>

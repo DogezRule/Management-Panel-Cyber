@@ -59,22 +59,11 @@
                             </div>
                         </div>
                         
-                        <div class="mb-4">
-                            <h6 class="text-primary">Template Management</h6>
-                            <hr>
-                            
-                            <div class="mb-3 form-check">
-                                {{ form.auto_replicate_templates(class="form-check-input") }}
-                                {{ form.auto_replicate_templates.label(class="form-check-label") }}
-                                <small class="form-text text-muted d-block">
-                                    Automatically replicate templates to all nodes when needed for deployment
-                                </small>
-                            </div>
-                        </div>
-                        
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle"></i>
-                            <strong>Note:</strong> Some settings require application restart to take full effect. 
+                            <strong>Note:</strong> Templates are now configured per-node. When creating a template, 
+                            specify which nodes have the template and its VMID on each node. 
+                            Some settings require application restart to take full effect. 
                             Consider updating your <code>.env</code> file for persistence.
                         </div>
                         

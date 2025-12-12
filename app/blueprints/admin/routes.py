@@ -173,42 +173,59 @@ def delete_teacher(teacher_id):
 @login_required
 @admin_required
 def create_template():
-    """Register a new VM template"""
+    """Register a new VM template with per-node VMID mappings"""
+    from ...models import TemplateNodeMapping
+    
     form = CreateVMTemplateForm()
+    nodes = NodeConfiguration.query.filter_by(is_active=True).all()
     
     if form.validate_on_submit():
+        # Create the template
         template = VMTemplate(
             name=form.name.data,
-            proxmox_template_id=form.proxmox_template_id.data,
-            proxmox_node=form.proxmox_node.data,
             description=form.description.data,
             memory=form.memory.data,
             cores=form.cores.data,
-            is_active=form.is_active.data,
-            replicate_to_all_nodes=form.replicate_to_all_nodes.data
+            is_active=form.is_active.data
         )
         
         try:
             db.session.add(template)
-            db.session.commit()
+            db.session.flush()  # Get template.id without committing
             
-            # If auto-replication is enabled, trigger replication
-            if form.replicate_to_all_nodes.data:
-                try:
-                    from ...services.vm_orchestrator import replicate_template_to_all_nodes
-                    replicate_template_to_all_nodes(template.id)
-                    flash(f'VM template "{template.name}" created and replication started', 'success')
-                except Exception as e:
-                    flash(f'Template created but replication failed: {str(e)}', 'warning')
-            else:
-                flash(f'VM template "{template.name}" created successfully', 'success')
-                
+            # Process node-VMID mappings from request form
+            node_vmid_map = {}
+            for node in nodes:
+                vmid_field = f'node_{node.id}_vmid'
+                if vmid_field in request.form and request.form.get(vmid_field):
+                    try:
+                        vmid = int(request.form.get(vmid_field))
+                        node_vmid_map[node.node_name] = vmid
+                    except (ValueError, TypeError):
+                        pass
+            
+            if not node_vmid_map:
+                db.session.rollback()
+                flash('Error: You must specify at least one node with a template VMID', 'danger')
+                return render_template('admin/create_template.html', form=form, nodes=nodes)
+            
+            # Create mappings for each node
+            for node_name, vmid in node_vmid_map.items():
+                mapping = TemplateNodeMapping(
+                    template_id=template.id,
+                    proxmox_node=node_name,
+                    proxmox_template_id=vmid
+                )
+                db.session.add(mapping)
+            
+            db.session.commit()
+            flash(f'VM template "{template.name}" created successfully with {len(node_vmid_map)} node mapping(s)', 'success')
             return redirect(url_for('admin.dashboard'))
         except Exception as e:
             db.session.rollback()
             flash(f'Error creating template: {str(e)}', 'danger')
     
-    return render_template('admin/create_template.html', form=form)
+    return render_template('admin/create_template.html', form=form, nodes=nodes)
 
 
 @bp.route('/templates/<int:template_id>/delete', methods=['POST'])
@@ -350,6 +367,82 @@ def create_node():
 @login_required
 @admin_required
 def edit_node(node_id):
+    """Edit node configuration"""
+    node = NodeConfiguration.query.get_or_404(node_id)
+    form = NodeConfigurationForm(obj=node)
+    if node.storage_pools:
+        form.storage_pools.data = node.storage_pools
+    else:
+        form.storage_pools.data = node.storage_pool
+
+    if form.validate_on_submit():
+        node.node_name = form.node_name.data
+        node.max_vms = form.max_vms.data
+        node.storage_pools = form.storage_pools.data
+        node.priority = form.priority.data
+        node.is_active = form.is_active.data
+
+        try:
+            from ...models import NodeStorageConfig
+
+            # 1) Create / upsert storages from the picker
+            selected = request.form.get('selected_storages', '').strip()
+            if selected:
+                selected_names = [x.strip() for x in selected.split(',') if x.strip()]
+                for name in selected_names:
+                    sc = NodeStorageConfig.query.filter_by(node_id=node.id, name=name).first()
+                    if not sc:
+                        sc = NodeStorageConfig(
+                            node_id=node.id,
+                            name=name,
+                            weight=1,
+                            max_vms=None,
+                            active=True
+                        )
+                        db.session.add(sc)
+                # Make sure node.storage_pools mirrors everything
+                existing_pools = [x.strip() for x in (node.storage_pools or '').split(',') if x.strip()]
+                merged = sorted(set(existing_pools + selected_names))
+                node.storage_pools = ', '.join(merged)
+
+            # 2) Update weights / max_vms / active flags for *all* storages in the table
+            names = request.form.getlist('storage_name')
+            weights = request.form.getlist('storage_weight')
+            maxvms = request.form.getlist('storage_max_vms')
+
+            form_map = request.form.to_dict(flat=False)
+            active_flags = form_map.get('storage_active', [])
+
+            for i, n in enumerate(names):
+                sc = NodeStorageConfig.query.filter_by(node_id=node.id, name=n).first()
+                if not sc:
+                    sc = NodeStorageConfig(node_id=node.id, name=n)
+                    db.session.add(sc)
+
+                try:
+                    sc.weight = int(weights[i]) if weights and i < len(weights) and weights[i].strip() != '' else 1
+                except Exception:
+                    sc.weight = 1
+
+                try:
+                    mv = maxvms[i].strip() if maxvms and i < len(maxvms) else ''
+                    sc.max_vms = int(mv) if mv != '' else None
+                except Exception:
+                    sc.max_vms = None
+
+                # Any checkbox present in order = active; missing index = inactive
+                sc.active = i < len(active_flags)
+
+            db.session.commit()
+            flash(f'Node "{node.node_name}" updated successfully', 'success')
+            return redirect(url_for('admin.nodes'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating node: {str(e)}', 'danger')
+
+    # GET path: just render the form
+    return render_template('admin/edit_node.html', form=form, node=node)
+
     """Edit node configuration"""
     node = NodeConfiguration.query.get_or_404(node_id)
 
@@ -520,21 +613,6 @@ def edit_node(node_id):
     return render_template("admin/edit_node.html", form=form, node=node)
 
 
-@bp.route('/templates/<int:template_id>/replicate', methods=['POST'])
-@login_required
-@admin_required
-def replicate_template(template_id):
-    """Manually trigger template replication to all nodes"""
-    template = VMTemplate.query.get_or_404(template_id)
-    
-    try:
-        from ...services.vm_orchestrator import replicate_template_to_all_nodes
-        replicate_template_to_all_nodes(template_id)
-        flash(f'Template "{template.name}" replication started', 'success')
-    except Exception as e:
-        flash(f'Error starting replication: {str(e)}', 'danger')
-    
-    return redirect(url_for('admin.dashboard'))
 
 
 @bp.route('/settings/multi-node', methods=['GET', 'POST'])
@@ -549,7 +627,6 @@ def multi_node_settings():
         from flask import current_app
         form.max_vms_per_node.data = current_app.config.get('MAX_VMS_PER_NODE', 12)
         form.use_linked_clones.data = current_app.config.get('USE_LINKED_CLONES', True)
-        form.auto_replicate_templates.data = current_app.config.get('AUTO_REPLICATE_TEMPLATES', True)
         form.node_selection_strategy.data = current_app.config.get('NODE_SELECTION_STRATEGY', 'least_vms')
     
     if form.validate_on_submit():

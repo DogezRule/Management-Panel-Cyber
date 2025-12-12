@@ -264,16 +264,16 @@
                     <i class="bi bi-power"></i> VM Controls
                 </div>
                 <div class="control-section-content">
-                    <button id="vm-start" class="btn-control btn-success" onclick="controlVM('start')" disabled>
+                    <button id="vm-start" class="btn-control btn-success" disabled>
                         <i class="bi bi-play-fill"></i> Start VM
                     </button>
-                    <button id="vm-stop" class="btn-control btn-danger" onclick="controlVM('stop')" disabled>
+                    <button id="vm-stop" class="btn-control btn-danger" disabled>
                         <i class="bi bi-stop-fill"></i> Stop VM
                     </button>
-                    <button id="vm-reset" class="btn-control btn-danger" onclick="controlVM('reset')" disabled>
+                    <button id="vm-reset" class="btn-control btn-danger" disabled>
                         <i class="bi bi-arrow-clockwise"></i> Reset VM
                     </button>
-                    <button id="vm-refresh" class="btn-control" onclick="refreshStatus()">
+                    <button id="vm-refresh" class="btn-control">
                         <i class="bi bi-arrow-clockwise"></i> Refresh Status
                     </button>
                 </div>
@@ -288,33 +288,31 @@
                     <div class="control-item">
                         <span class="control-label">Scale Viewport</span>
                         <div>
-                            <input type="checkbox" id="scale-viewport" checked onchange="toggleScaling()">
+                            <input type="checkbox" id="scale-viewport" checked>
                         </div>
                     </div>
                     <div class="control-item">
                         <span class="control-label">Resize Session</span>
                         <div>
-                            <input type="checkbox" id="resize-session" checked onchange="toggleResize()">
+                            <input type="checkbox" id="resize-session" checked>
                         </div>
                     </div>
                     <div class="control-item">
                         <span class="control-label">View Only</span>
                         <div>
-                            <input type="checkbox" id="view-only" onchange="toggleViewOnly()">
+                            <input type="checkbox" id="view-only">
                         </div>
                     </div>
-                    <button class="btn-control" onclick="sendCtrlAltDel()">
+                    <button id="send-ctrl-alt-del" class="btn-control">
                         <i class="bi bi-keyboard"></i> Send Ctrl+Alt+Del
                     </button>
-                    <button class="btn-control" onclick="reconnectConsole()">
+                    <button id="reconnect-console" class="btn-control">
                         <i class="bi bi-arrow-clockwise"></i> Reconnect Console
                     </button>
-                    <button id="clipboard-send-btn" class="btn-control" onclick="sendClipboard()" 
-                            title="Send clipboard to VM">
+                    <button id="clipboard-send-btn" class="btn-control" title="Send clipboard to VM">
                         <i class="bi bi-clipboard-plus"></i> Send Clipboard
                     </button>
-                    <button id="clipboard-receive-btn" class="btn-control" onclick="receiveClipboard()" 
-                            title="Receive clipboard from VM">
+                    <button id="clipboard-receive-btn" class="btn-control" title="Receive clipboard from VM">
                         <i class="bi bi-clipboard-check"></i> Get Clipboard
                     </button>
                 </div>
@@ -355,7 +353,7 @@
         </div>
 
         <div id="console-container">
-            <button class="toggle-panel-btn" onclick="toggleControlPanel()" title="Toggle Control Panel">
+            <button id="toggle-panel-btn" class="toggle-panel-btn" title="Toggle Control Panel">
                 <i class="bi bi-chevron-left" id="toggle-icon"></i>
             </button>
             <div id="loading-overlay">
@@ -389,6 +387,14 @@
                 : 'bi bi-chevron-left';
         };
 
+        // Attach event listener to toggle panel button
+        document.addEventListener('DOMContentLoaded', function() {
+            const togglePanelBtn = document.getElementById('toggle-panel-btn');
+            if (togglePanelBtn) {
+                togglePanelBtn.addEventListener('click', window.toggleControlPanel);
+            }
+        });
+
         window.toggleScaling = function() {
             if (rfb) {
                 rfb.scaleViewport = document.getElementById('scale-viewport').checked;
@@ -414,9 +420,19 @@
         };
 
         window.reconnectConsole = function() {
+            console.log('[CONSOLE] Reconnecting...');
             if (rfb) {
-                rfb.disconnect();
+                try {
+                    rfb.disconnect();
+                } catch (e) {
+                    console.warn('[CONSOLE] Error disconnecting RFB:', e);
+                }
             }
+            updateConnectionStatus('Connecting...', 'connecting');
+            loadingOverlay.style.display = 'flex';
+            loadingOverlay.querySelector('.text-center').innerHTML = 
+                '<div class="text-center text-white"><div class="spinner-border mb-3" role="status"></div><div>Reconnecting to console...</div></div>';
+            
             setTimeout(() => {
                 connect();
             }, 1000);
@@ -480,9 +496,17 @@
             
             ConsoleUtils.apiRequest(`/api/vm/${vmId}/status`)
                 .then(result => {
-                    if (result.success) {
-                        vmStatus.textContent = result.status;
-                        updateVMControls(result.status);
+                    // The status endpoint returns the Proxmox API response with 'data' property
+                    const statusData = result.data || result;
+                    if (statusData && statusData.status) {
+                        vmStatus.textContent = statusData.status;
+                        updateVMControls(statusData.status);
+                        console.log('[CONSOLE] VM Status updated:', statusData.status);
+                    } else if (result.error) {
+                        console.error('API Error:', result.error);
+                        ConsoleUtils.showNotification('Failed to fetch VM status: ' + result.error, 'warning');
+                    } else {
+                        console.warn('[CONSOLE] Unexpected response format:', result);
                     }
                 })
                 .catch(error => {
@@ -495,6 +519,14 @@
             const startBtn = document.getElementById('vm-start');
             const stopBtn = document.getElementById('vm-stop');
             const resetBtn = document.getElementById('vm-reset');
+            
+            // If no status provided, disable all controls
+            if (!status) {
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+                resetBtn.disabled = true;
+                return;
+            }
             
             // Enable/disable buttons based on VM status
             if (status === 'running') {
@@ -547,18 +579,26 @@
             }
             loadingOverlay.style.display = 'flex';
             loadingOverlay.querySelector('.text-center').innerHTML = 
-                '<div class="text-danger"><i class="bi bi-x-circle fs-1 mb-3"></i><div>Connection lost. <button class="btn btn-primary btn-sm mt-2" onclick="reconnectConsole()">Reconnect</button></div></div>';
+                '<div class="text-danger"><i class="bi bi-x-circle fs-1 mb-3"></i><div>Connection lost. <button class="btn btn-primary btn-sm mt-2" id="reconnect-overlay-btn">Reconnect</button></div></div>';
+            // Re-attach event listener to the new button
+            setTimeout(() => {
+                const overlayBtn = document.getElementById('reconnect-overlay-btn');
+                if (overlayBtn) {
+                    overlayBtn.addEventListener('click', window.reconnectConsole);
+                }
+            }, 0);
         }
 
         async function connect() {
             const vmId = screenDiv.dataset.vmId;
+            console.log('[CONSOLE] Starting connection to VM', vmId);
             updateConnectionStatus('Connecting...', 'connecting');
             
             try {
                 // Connect through Flask WebSocket proxy
                 const url = ConsoleUtils.getWebSocketUrl(vmId);
                 
-                console.log('Connecting to Flask proxy:', url);
+                console.log('[CONSOLE] Connecting via Flask proxy:', url);
                 
                 // Create RFB with empty password - proxy handles VNC auth
                 rfb = new RFB(screenDiv, url, {
@@ -586,13 +626,42 @@
                 rfb.resizeSession = true;
                 rfb.viewOnly = false;
                 
+                console.log('[CONSOLE] RFB instance created successfully');
+                
             } catch (err) {
-                console.error('Error connecting:', err);
+                console.error('[CONSOLE] Error connecting:', err);
                 updateConnectionStatus('Failed to initialize', 'disconnected');
                 loadingOverlay.querySelector('.text-center').innerHTML = 
-                    `<div class="text-danger"><i class="bi bi-x-circle fs-1 mb-3"></i><div>Error: ${err.message}</div></div>`;
+                    `<div class="text-danger"><i class="bi bi-x-circle fs-1 mb-3"></i><div>Error: ${err.message || 'Unknown error'}</div><div><button class="btn btn-primary btn-sm mt-2" id="reconnect-error-btn">Reconnect</button></div></div>`;
+                // Re-attach event listener to the new button
+                setTimeout(() => {
+                    const errorBtn = document.getElementById('reconnect-error-btn');
+                    if (errorBtn) {
+                        errorBtn.addEventListener('click', window.reconnectConsole);
+                    }
+                }, 0);
             }
         }
+
+        // Attach event listeners to all buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            // VM control buttons
+            document.getElementById('vm-start')?.addEventListener('click', () => window.controlVM('start'));
+            document.getElementById('vm-stop')?.addEventListener('click', () => window.controlVM('stop'));
+            document.getElementById('vm-reset')?.addEventListener('click', () => window.controlVM('reset'));
+            document.getElementById('vm-refresh')?.addEventListener('click', window.refreshStatus);
+            
+            // Console control buttons
+            document.getElementById('send-ctrl-alt-del')?.addEventListener('click', window.sendCtrlAltDel);
+            document.getElementById('reconnect-console')?.addEventListener('click', window.reconnectConsole);
+            document.getElementById('clipboard-send-btn')?.addEventListener('click', window.sendClipboard);
+            document.getElementById('clipboard-receive-btn')?.addEventListener('click', window.receiveClipboard);
+            
+            // Checkbox listeners
+            document.getElementById('scale-viewport')?.addEventListener('change', window.toggleScaling);
+            document.getElementById('resize-session')?.addEventListener('change', window.toggleResize);
+            document.getElementById('view-only')?.addEventListener('change', window.toggleViewOnly);
+        });
 
         // Initialize keyboard shortcuts
         const shortcuts = new KeyboardShortcuts();
@@ -608,9 +677,14 @@
             }
         });
 
-        // Initialize
-        connect();
-        refreshStatus();
+        // Initialize - fetch status first to set control state, then connect to console
+        console.log('[CONSOLE] Initializing console...');
+        // refreshStatus(); // Temporarily disabled - SSH timeout issue
+        setTimeout(() => {
+            connect();
+            // Refresh status periodically
+            // setInterval(refreshStatus, 5000); // Temporarily disabled
+        }, 500);
         updateVMControls();
     </script>
 </body>
