@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block title %}Node Management{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Node Management</h2>
+                <div>
+                    <a href="{{ url_for('admin.create_node') }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Add Node
+                    </a>
+                    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+            
+            {% if nodes %}
+            <div class="card">
+                <div class="card-body">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Node Name</th>
+                                <th>Status</th>
+                                <th>VMs</th>
+                                <th>Utilization</th>
+                                <th>Storages</th>
+                                <th>Priority</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for node in nodes %}
+                            <tr>
+                                <td>
+                                    <strong>{{ node.node_name }}</strong>
+                                </td>
+                                <td>
+                                    {% if node.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ node.get_current_vm_count() }}/{{ node.max_vms }}
+                                </td>
+                                <td>
+                                    {% set utilization = (node.get_current_vm_count() / node.max_vms * 100) if node.max_vms > 0 else 0 %}
+                                    <span>{{ (utilization|default(0)|float)|round(1) }}%</span>
+                                </td>
+                                <td>
+                                    {% set sc_list = storage_counts.get(node.id, []) %}
+                                    {% if sc_list %}
+                                        {% for sc in sc_list %}
+                                            <span class="badge bg-light text-dark border me-1">{{ sc.name }}: {{ sc.count }}{% if sc.max_vms %}/{{ sc.max_vms }}{% endif %}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">None</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ node.priority }}</td>
+                                <td>
+                                    <a href="{{ url_for('admin.edit_node', node_id=node.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-pencil"></i> Edit
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="bi bi-server" style="font-size: 3rem; color: #6c757d;"></i>
+                    <h5 class="mt-3">No Nodes Configured</h5>
+                    <p class="text-muted">Get started by adding your first Proxmox node.</p>
+                    <a href="{{ url_for('admin.create_node') }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Add First Node
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,132 @@
+- name: Lock down student user + enable root (lab permissions)
+  hosts: students
+  become: true
+  gather_facts: true
+
+  vars:
+    marker: /var/local/.lab_permissions_done
+    student_user: student
+    root_pass_plain: "Cyb3rLab2S8"
+
+    remove_groups:
+      - sudo
+      - adm
+      - admin
+      - dialout
+      - plugdev
+      - lpadmin
+      - sambashare
+
+    terminal_binaries:
+      - /usr/bin/gnome-terminal
+      - /usr/bin/x-terminal-emulator
+      - /usr/bin/tilix
+      - /usr/bin/konsole
+      - /usr/bin/xfce4-terminal
+      - /usr/bin/lxterminal
+      - /usr/bin/urxvt
+      - /usr/bin/xterm
+
+    # Binaries to be blocked via ACLs
+    settings_binaries:
+      - /usr/bin/gnome-control-center
+      - /usr/bin/rhythmbox
+      - /usr/bin/snap-store
+      - /usr/bin/ubuntu-software
+
+  tasks:
+
+    # --- Preconditions ---
+    - name: Ensure student user exists
+      getent:
+        database: passwd
+        key: "{{ student_user }}"
+
+    # --- 1) Software Removal ---
+    - name: Completely uninstall Remmina and unused dependencies
+      apt:
+        name: remmina*
+        state: absent
+        purge: true
+        autoremove: true
+
+    # --- 2) Enable root + set password ---
+    - name: Set root password (hashed)
+      user:
+        name: root
+        password: "{{ root_pass_plain | password_hash('sha512') }}"
+        password_lock: false
+
+    # --- 3) Remove student from admin groups ---
+    - name: Remove student from restricted groups
+      shell: |
+        if getent group "{{ item }}" >/dev/null 2>&1; then
+          gpasswd -d "{{ student_user }}" "{{ item }}" || true
+        fi
+      loop: "{{ remove_groups }}"
+      changed_when: false
+
+    # --- 4) Sudoers denial ---
+    - name: Create explicit sudoers denial
+      copy:
+        dest: /etc/sudoers.d/50-restrict-student
+        mode: "0440"
+        content: "student ALL=(ALL) !ALL"
+
+    # --- 5) File System & Binary Lockdown ---
+    - name: Ensure 'acl' package is installed
+      apt:
+        name: acl
+        state: present
+
+    - name: Apply ACL deny (---) for student on specific binaries
+      shell: |
+        b="{{ item }}"
+        if [ -e "$b" ]; then
+          setfacl -b "$b"
+          setfacl -m "u:{{ student_user }}:---" "$b"
+        fi
+      loop: "{{ terminal_binaries + settings_binaries }}"
+      changed_when: false
+
+    - name: Hide Application Launchers from student menu
+      file:
+        path: "/usr/share/applications/{{ item }}"
+        mode: "0700"
+        owner: root
+      loop:
+        - snap-store_snap-store.desktop
+        - ubuntu-software_ubuntu-software.desktop
+        - rhythmbox.desktop
+        - gnome-control-center.desktop
+      ignore_errors: true
+
+    # --- 6) Dconf lockdown ---
+    - name: Ensure dconf directories exist
+      file:
+        path: /etc/dconf/db/local.d/locks
+        state: directory
+
+    - name: Write dconf lockdown file
+      copy:
+        dest: /etc/dconf/db/local.d/00-lockdown
+        content: |
+          [org/gnome/desktop/lockdown]
+          disable-command-line=true
+          disable-user-switching=true
+          disable-lock-screen=false
+
+    - name: Run dconf update
+      command: dconf update
+      changed_when: false
+
+    # --- 7) Marker ---
+    - name: Create marker file
+      file:
+        path: "{{ marker }}"
+        state: touch
+        mode: "0600"
+
+    - name: Done message
+      debug:
+        msg: "Remmina uninstalled. Settings, App Store, and Rhythmbox blocked for student."

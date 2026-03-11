@@ -1,0 +1,198 @@
+"""Proxmox VE API and SSH client wrapper"""
+
+import paramiko
+import json
+import subprocess
+import urllib.parse
+from typing import Dict, List
+
+# No urllib3/requests to avoid gevent SSL monkey-patch issues
+
+
+class ProxmoxClient:
+    """Client for interacting with Proxmox VE via API or SSH."""
+
+    def __init__(
+        self,
+        host: str,
+        user: str = None,
+        token_name: str = None,
+        token_value: str = None,
+        ssh_host: str = None,
+        ssh_user: str = None,
+        ssh_key_path: str = None,
+        password: str = None
+    ):
+        self.host = host
+        self.user = user
+        self.token_name = token_name
+        self.token_value = token_value
+        self.password = password
+
+        self.ssh_host = ssh_host
+        self.ssh_user = ssh_user
+        self.ssh_key_path = ssh_key_path
+
+        self.use_ssh = bool(ssh_key_path)
+
+        # Always set up API headers if we have token credentials
+        # SSH and API can both be used
+        if token_name and token_value:
+            self.api_token = f"{user}!{token_name}={token_value}"
+            self.headers = {
+                "Authorization": f"PVEAPIToken={self.api_token}"
+            }
+        else:
+            self.headers = {}
+
+        self.session_ticket = None
+        self.csrf_token = None
+
+    # -----------------------------
+    # INTERNAL UTILITIES
+    # -----------------------------
+                "Authorization": f"PVEAPIToken={self.api_token}"
+            })
+
+    # -----------------------------
+    # INTERNAL UTILITIES
+    # -----------------------------
+    def _build_url(self, endpoint: str) -> str:
+        endpoint = endpoint.lstrip("/")
+        return urljoin(self.api_base, endpoint)
+
+    def _handle_response(self, response: Response) -> Dict:
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = ""
+            try:
+                detail = response.json()
+            except Exception:
+                detail = response.text
+            raise RuntimeError(f"Proxmox API error: {exc} - {detail}") from exc
+
+        data = response.json()
+        if isinstance(data, dict) and "data" in data:
+            return data["data"]
+        return data
+
+    def _api_request(self, method: str, endpoint: str, data: Dict = None, params: Dict = None) -> Dict:
+        """Make an HTTPS request to the Proxmox API."""
+        url = self._build_url(endpoint)
+        response = self.session.request(
+            method.upper(),
+            url,
+            data=data,
+            params=params,
+            timeout=self.request_timeout
+        )
+        return self._handle_response(response)
+
+    # -----------------------------
+    # NODE + CLUSTER INFO
+    # -----------------------------
+    def get_nodes(self) -> List[str]:
+        nodes = self._api_request("GET", "nodes")
+        return [n["node"] for n in nodes]
+
+    def get_next_vmid(self) -> int:
+        return int(self._api_request("GET", "cluster/nextid"))
+
+    # -----------------------------
+    # VM OPERATIONS
+    # -----------------------------
+    def clone_vm(self, node: str, template_id: int, new_vmid: int, name: str,
+                 storage: str = None, linked: bool = True) -> Dict:
+        """Clone a VM using the REST API (more reliable than SSH)"""
+        data = {
+            "newid": new_vmid,
+            "name": name
+        }
+        # Note: linked clone support via snapshot requires the template to have the snapshot.
+        # For now, we'll do full clones to ensure compatibility.
+        # If you want linked clones, create a __base__ snapshot on the template first.
+        if storage:
+            data["storage"] = storage
+
+        return self._api_request("POST", f"nodes/{node}/qemu/{template_id}/clone", data)
+
+    def create_template_snapshot(self, node: str, vmid: int, name: str = "__base__"):
+        self._api_request("POST", f"nodes/{node}/qemu/{vmid}/snapshot", {"snapname": name})
+
+    def optimize_vm_for_performance(self, node: str, vmid: int):
+        cfg = self.get_vm_config(node, vmid)
+        changes = {}
+
+        if "agent" not in cfg:
+            changes["agent"] = "enabled=1"
+
+        if cfg.get("cpu") == "qemu64":
+            changes["cpu"] = "host"
+
+        if "balloon" not in cfg:
+            changes["balloon"] = 0
+
+        if changes:
+            self._api_request("PUT", f"nodes/{node}/qemu/{vmid}/config", changes)
+
+    def start_vm(self, node: str, vmid: int):
+        self._api_request("POST", f"nodes/{node}/qemu/{vmid}/status/start")
+
+    def stop_vm(self, node: str, vmid: int):
+        self._api_request("POST", f"nodes/{node}/qemu/{vmid}/status/stop")
+
+    def reset_vm(self, node: str, vmid: int):
+        self._api_request("POST", f"nodes/{node}/qemu/{vmid}/status/reset")
+
+    def suspend_vm(self, node: str, vmid: int):
+        self._api_request("POST", f"nodes/{node}/qemu/{vmid}/status/suspend")
+
+    def resume_vm(self, node: str, vmid: int):
+        self._api_request("POST", f"nodes/{node}/qemu/{vmid}/status/resume")
+
+    def delete_vm(self, node: str, vmid: int):
+        self._api_request("DELETE", f"nodes/{node}/qemu/{vmid}")
+
+    def get_vm_status(self, node: str, vmid: int):
+        return self._api_request("GET", f"nodes/{node}/qemu/{vmid}/status/current")
+
+    def get_vm_config(self, node: str, vmid: int) -> Dict:
+        return self._api_request("GET", f"nodes/{node}/qemu/{vmid}/config")
+
+    # -----------------------------
+    # Console URL Helper
+    # -----------------------------
+    def get_console_url(self, node: str, vmid: int) -> str:
+        """Get VNC console URL - opens Proxmox web UI console"""
+        # Use the Proxmox web UI console which handles auth internally
+        # This is simpler and more reliable than proxying
+        proxmox_host = self.host.replace('https://', '').replace('http://', '')
+        return f"https://{proxmox_host}/?console=kvm&novnc=1&vmid={vmid}&node={node}&resize=off"
+
+    def get_vnc_ticket(self, node: str, vmid: int) -> Dict:
+        """Get VNC ticket for console access via the HTTPS API."""
+        data = self._api_request(
+            "POST",
+            f"nodes/{node}/qemu/{vmid}/vncproxy",
+            {"websocket": 1}
+        )
+        return {
+            "ticket": data.get("ticket", ""),
+            "port": data.get("port", ""),
+            "upid": data.get("upid", ""),
+            "user": self.user,
+            "session_ticket": None
+        }
+
+    def get_websocket_headers(self) -> Dict[str, str]:
+        """Return headers required to authenticate a VNC websocket handshake."""
+        if self.api_token:
+            return {"Authorization": f"PVEAPIToken={self.api_token}"}
+
+        headers = {}
+        if self.session_ticket:
+            headers["Cookie"] = f"PVEAuthCookie={self.session_ticket}"
+        if self.csrf_token:
+            headers["CSRFPreventionToken"] = self.csrf_token
+        return headers

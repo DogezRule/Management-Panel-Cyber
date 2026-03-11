@@ -1,0 +1,15 @@
+---
+- name: Enable Firefox enterprise roots (use system CA store)
+  copy:
+    dest: /etc/firefox/policies/policies.json
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      {
+        "policies": {
+          "Certificates": {
+            "ImportEnterpriseRoots": true
+          }
+        }
+      }

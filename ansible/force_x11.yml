@@ -1,0 +1,21 @@
+---
+- name: Force GNOME to use X11 (disable Wayland in GDM)
+  hosts: students
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Ensure /etc/gdm3/custom.conf has Wayland disabled + Xorg default
+      ansible.builtin.blockinfile:
+        path: /etc/gdm3/custom.conf
+        create: true
+        marker: "# {mark} ANSIBLE CYBERLAB X11"
+        block: |
+          [daemon]
+          WaylandEnable=false
+          DefaultSession=gnome-xorg.desktop
+
+    - name: Restart GDM (logs out active GUI sessions)
+      ansible.builtin.service:
+        name: gdm3
+        state: restarted

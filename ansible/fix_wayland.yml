@@ -1,0 +1,53 @@
+---
+- name: Remove Snap Firefox desktop entries (APT Firefox only)
+  hosts: students
+  become: true
+  gather_facts: false
+
+  vars:
+    student_user: student
+
+  tasks:
+    # --- System-wide desktop entries ---
+    - name: Remove system-wide snap Firefox desktop file (if present)
+      ansible.builtin.file:
+        path: /var/lib/snapd/desktop/applications/firefox_firefox.desktop
+        state: absent
+
+    - name: Remove legacy snap Firefox desktop file (if present)
+      ansible.builtin.file:
+        path: /usr/share/applications/firefox_firefox.desktop
+        state: absent
+
+    # --- User-level desktop entries ---
+    - name: Remove snap Firefox desktop entries from student home
+      ansible.builtin.file:
+        path: "/home/{{ student_user }}/.local/share/applications/firefox_firefox.desktop"
+        state: absent
+
+    - name: Remove snap Firefox Wayland desktop entry from student home
+      ansible.builtin.file:
+        path: "/home/{{ student_user }}/.local/share/applications/firefox_wayland.desktop"
+        state: absent
+
+    - name: Remove snap Firefox debug desktop entry from student home
+      ansible.builtin.file:
+        path: "/home/{{ student_user }}/.local/share/applications/firefox_debug.desktop"
+        state: absent
+
+    # --- Kill GNOME app cache so menu refreshes ---
+    - name: Clear GNOME desktop cache for student
+      ansible.builtin.shell: |
+        rm -rf /home/{{ student_user }}/.cache/gnome-shell/*
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Kill gnome-shell to force menu reload (Wayland-safe)
+      ansible.builtin.shell: |
+        pkill -u {{ student_user }} -f gnome-shell || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false

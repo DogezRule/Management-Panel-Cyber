@@ -1,0 +1,121 @@
+---
+- name: Force Wayland for Firefox via wrapper (no global session env)
+  hosts: students
+  become: true
+  gather_facts: true
+
+  vars:
+    # Paths where snap Firefox desktop file is commonly found
+    firefox_desktop_candidates:
+      - /usr/share/applications/firefox_firefox.desktop
+      - /var/lib/snapd/desktop/applications/firefox_firefox.desktop
+
+  tasks:
+    # --- Remove the global session env approach ---
+    - name: Ensure legacy/dangerous firefox wayland profile.d script is absent
+      ansible.builtin.file:
+        path: /etc/profile.d/firefox-wayland.sh
+        state: absent
+
+    - name: Ensure legacy disabled profile.d script is absent
+      ansible.builtin.file:
+        path: /etc/profile.d/firefox-wayland.sh.disabled
+        state: absent
+
+    - name: Ensure global environment.d Firefox Wayland conf is absent (this caused issues)
+      ansible.builtin.file:
+        path: /etc/environment.d/90-firefox-wayland.conf
+        state: absent
+
+    - name: Ensure legacy disabled environment.d conf is absent
+      ansible.builtin.file:
+        path: /etc/environment.d/90-firefox-wayland.conf.disabled
+        state: absent
+
+    # --- Install Firefox-only wrapper ---
+    - name: Install firefox-wayland wrapper
+      ansible.builtin.copy:
+        dest: /usr/local/bin/firefox-wayland
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          export MOZ_ENABLE_WAYLAND=1
+          export MOZ_USE_XINPUT2=1
+          exec /usr/bin/firefox "$@"
+
+    # --- Find the real firefox desktop file on this system ---
+    - name: Stat desktop candidates
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ firefox_desktop_candidates }}"
+      register: ff_desktop_stats
+
+    - name: Pick the first existing Firefox desktop file
+      ansible.builtin.set_fact:
+        ff_desktop_src: "{{ (ff_desktop_stats.results | selectattr('stat.exists') | map(attribute='stat.path') | list | first) | default('') }}"
+
+    - name: Fail if no Firefox desktop file was found
+      ansible.builtin.fail:
+        msg: "Could not find firefox_firefox.desktop in known locations. Install Firefox snap first."
+      when: ff_desktop_src | length == 0
+
+    # --- Copy to /usr/local/share/applications so it overrides system desktop file ---
+    - name: Ensure /usr/local/share/applications exists
+      ansible.builtin.file:
+        path: /usr/local/share/applications
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy Firefox desktop file to local override location
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ ff_desktop_src }}"
+        dest: /usr/local/share/applications/firefox_firefox.desktop
+        owner: root
+        group: root
+        mode: "0644"
+
+    # --- Rewrite Exec line to go through wrapper ---
+    - name: Rewrite Exec line to use /usr/local/bin/firefox-wayland
+      ansible.builtin.replace:
+        path: /usr/local/share/applications/firefox_firefox.desktop
+        regexp: '^Exec=.*'
+        replace: 'Exec=/usr/local/bin/firefox-wayland %u'
+
+    # Some desktop files have multiple Exec= lines (rare). Make sure ALL are rewritten.
+    - name: Ensure any remaining Exec lines are rewritten too (safety)
+      ansible.builtin.replace:
+        path: /usr/local/share/applications/firefox_firefox.desktop
+        regexp: '^Exec=.*firefox.*'
+        replace: 'Exec=/usr/local/bin/firefox-wayland %u'
+
+    # --- Update desktop database (best-effort) ---
+    - name: Update desktop database (best-effort)
+      ansible.builtin.command: update-desktop-database /usr/local/share/applications
+      changed_when: false
+      failed_when: false
+
+    - name: Final note
+      ansible.builtin.debug:
+        msg: >
+          Firefox Wayland is now enforced via wrapper + desktop override.
+          Have the student log out/in (or reboot) so their launcher refreshes.
+    - name: Override Firefox desktop entry to force Wayland wrapper
+      ansible.builtin.copy:
+        dest: /usr/share/applications/firefox-wayland.desktop
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Desktop Entry]
+          Name=Firefox
+          Comment=Browse the Web
+          Exec=/usr/local/bin/firefox-wayland
+          Icon=firefox
+          Terminal=false
+          Type=Application
+          Categories=Network;WebBrowser;

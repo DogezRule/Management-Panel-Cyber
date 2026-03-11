@@ -1,0 +1,69 @@
+---
+- name: Enforce .local DNS resolution (Windows-like behavior)
+  hosts: students
+  become: true
+  gather_facts: true
+
+  vars:
+    dns_server: "192.168.1.6"
+    dns_domain: "local"
+
+  tasks:
+
+    - name: Ensure correct NSS resolution order
+      replace:
+        path: /etc/nsswitch.conf
+        regexp: '^hosts:.*'
+        replace: 'hosts: files dns mdns4_minimal'
+
+    - name: Disable mDNS and set global domain routing
+      blockinfile:
+        path: /etc/systemd/resolved.conf
+        create: yes
+        block: |
+          [Resolve]
+          MulticastDNS=no
+          DNS={{ dns_server }}
+          Domains={{ dns_domain }}
+
+    - name: Restart systemd-resolved
+      systemd:
+        name: systemd-resolved
+        state: restarted
+        enabled: true
+
+    - name: Get active NetworkManager connection name
+      command: nmcli -t -f NAME,DEVICE connection show --active
+      register: nm_connections
+
+    - name: Set active connection fact
+      set_fact:
+        active_connection: "{{ nm_connections.stdout_lines[0].split(':')[0] }}"
+
+    - name: Ensure DNS server is set on NetworkManager connection
+      command: >
+        nmcli connection modify "{{ active_connection }}"
+        ipv4.dns "{{ dns_server }}"
+        ipv4.ignore-auto-dns no
+
+    - name: Ensure DNS search domain is set to local
+      command: >
+        nmcli connection modify "{{ active_connection }}"
+        ipv4.dns-search "{{ dns_domain }}"
+
+    - name: Restart NetworkManager
+      systemd:
+        name: NetworkManager
+        state: restarted
+
+    - name: Flush DNS cache
+      command: resolvectl flush-caches
+
+    - name: Verify DNS resolution via system resolver
+      command: resolvectl query cybersecurity.local
+      register: dns_test
+      failed_when: "'resolve call failed' in dns_test.stderr"
+
+    - name: Show DNS resolution result
+      debug:
+        msg: "{{ dns_test.stdout }}"

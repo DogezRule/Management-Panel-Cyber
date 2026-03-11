@@ -1,0 +1,87 @@
+<nav class="navbar navbar-expand-lg" id="mainNavbar">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="{{ url_for('index') }}">
+            <i class="bi bi-hdd-rack"></i> CyberLab Admin
+        </a>
+        
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                {% if session.get('student_id') %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('student.dashboard') }}">
+                        <i class="bi bi-display"></i> My VMs
+                    </a>
+                </li>
+                {% elif current_user.is_authenticated and current_user.is_admin() %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('admin.dashboard') }}">
+                        <i class="bi bi-speedometer2"></i> Admin Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('admin.logs_page') }}">
+                        <i class="bi bi-journal-text"></i> Logs
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% if current_user.is_authenticated and (current_user.role == 'teacher' or current_user.is_admin()) %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('teacher.dashboard') }}">
+                        <i class="bi bi-book"></i> My Classes
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('teacher.import_class') }}">
+                        <i class="bi bi-file-earmark-arrow-up"></i> Import Class
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+            
+            <ul class="navbar-nav">
+                <!-- Theme Toggle -->
+                <li class="nav-item">
+                    <button class="btn btn-link nav-link" id="themeToggle" title="Toggle dark/light mode">
+                        <i class="bi bi-moon-stars" id="themeIcon"></i>
+                    </button>
+                </li>
+                
+                {% if session.get('student_id') %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('auth.student_logout') }}">
+                        <i class="bi bi-box-arrow-right"></i> Logout ({{ session.get('student_name') }})
+                    </a>
+                </li>
+                {% elif current_user.is_authenticated %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle"></i> {{ current_user.email }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <span class="dropdown-item-text">
+                                <strong>Role:</strong> {{ current_user.role|title }}
+                            </span>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('auth.teacher_logout') }}">
+                                <i class="bi bi-box-arrow-right"></i> Logout
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                {% else %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('auth.login') }}">Login</a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</nav>

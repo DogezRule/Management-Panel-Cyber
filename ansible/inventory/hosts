@@ -1,0 +1,10 @@
+[students]
+PC1A ansible_host=192.168.1.23
+PC3  ansible_host=192.168.1.16
+PC6  ansible_host=192.168.1.26
+PC9  ansible_host=192.168.1.25
+PC7  ansible_host=192.168.1.27
+PC1  ansible_host=192.168.1.24
+[students:vars]
+ansible_user=root
+ansible_ssh_private_key_file=~/.ssh/id_ed25519

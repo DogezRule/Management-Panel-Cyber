@@ -1,0 +1,141 @@
+---
+- name: Open CyberLab site in Firefox (Wayland or X11) - supports snap or apt
+  hosts: students
+  become: true
+  gather_facts: false
+
+  vars:
+    student_user: student
+    site_url: "https://cybersecurity.local/"
+
+  tasks:
+    - name: Get student UID
+      ansible.builtin.command: "id -u {{ student_user }}"
+      register: student_uid
+      changed_when: false
+
+    # Detect firefox install type (snap vs apt)
+    - name: Detect Firefox launch command (snap or apt)
+      ansible.builtin.shell: |
+        set -e
+        if command -v snap >/dev/null 2>&1 && snap list 2>/dev/null | awk '{print $1}' | grep -qx firefox; then
+          echo "snap run firefox"
+          exit 0
+        fi
+        if command -v firefox >/dev/null 2>&1; then
+          echo "firefox"
+          exit 0
+        fi
+        if [ -x /usr/bin/firefox ]; then
+          echo "/usr/bin/firefox"
+          exit 0
+        fi
+        echo ""
+      args:
+        executable: /bin/bash
+      register: firefox_cmd
+      changed_when: false
+
+    - name: Fail if Firefox is not installed
+      ansible.builtin.fail:
+        msg: "Firefox not found (neither snap nor apt)."
+      when: firefox_cmd.stdout | trim == ""
+
+    # Kill Firefox early (works even if not running)
+    - name: Kill all Firefox processes for the student user (ignore if none)
+      ansible.builtin.shell: |
+        pkill -u "{{ student_user }}" -f "firefox" || true
+        pkill -u "{{ student_user }}" -f "snap.*firefox" || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Brief pause to let Firefox fully exit
+      ansible.builtin.pause:
+        seconds: 1
+
+    - name: Check DBus session bus exists
+      ansible.builtin.stat:
+        path: "/run/user/{{ student_uid.stdout }}/bus"
+      register: bus_stat
+
+    - name: Find Wayland display socket (if Wayland session)
+      ansible.builtin.shell: "ls -1 /run/user/{{ student_uid.stdout }}/wayland-* 2>/dev/null | head -n 1"
+      register: wayland_sock
+      changed_when: false
+
+    - name: Detect X11 display number (if X11 session)
+      ansible.builtin.shell: |
+        if [ -S /tmp/.X11-unix/X0 ]; then
+          echo ":0"
+        elif [ -S /tmp/.X11-unix/X1 ]; then
+          echo ":1"
+        else
+          echo ""
+        fi
+      args:
+        executable: /bin/bash
+      register: x_display
+      changed_when: false
+
+    - name: Determine Xauthority file (X11)
+      ansible.builtin.shell: |
+        if [ -f /home/{{ student_user }}/.Xauthority ]; then
+          echo /home/{{ student_user }}/.Xauthority
+        elif [ -f /run/user/{{ student_uid.stdout }}/gdm/Xauthority ]; then
+          echo /run/user/{{ student_uid.stdout }}/gdm/Xauthority
+        else
+          echo ""
+        fi
+      args:
+        executable: /bin/bash
+      register: xauth
+      changed_when: false
+
+    # Wayland launch
+    - name: Launch Firefox into Wayland session
+      become_user: "{{ student_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ student_uid.stdout }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ student_uid.stdout }}/bus"
+        WAYLAND_DISPLAY: "{{ wayland_sock.stdout | basename }}"
+        MOZ_ENABLE_WAYLAND: "1"
+        MOZ_USE_XINPUT2: "1"
+      ansible.builtin.shell: |
+        setsid -f {{ firefox_cmd.stdout | trim }} "{{ site_url }}" >/dev/null 2>&1 </dev/null
+      args:
+        executable: /bin/bash
+      changed_when: false
+      when:
+        - bus_stat.stat.exists
+        - wayland_sock.stdout | trim != ""
+
+    # X11 fallback launch
+    - name: Launch Firefox into X11 session (fallback)
+      become_user: "{{ student_user }}"
+      environment:
+        DISPLAY: "{{ x_display.stdout }}"
+        XAUTHORITY: "{{ xauth.stdout }}"
+      ansible.builtin.shell: |
+        setsid -f {{ firefox_cmd.stdout | trim }} "{{ site_url }}" >/dev/null 2>&1 </dev/null
+      args:
+        executable: /bin/bash
+      changed_when: false
+      when:
+        - bus_stat.stat.exists
+        - wayland_sock.stdout | trim == ""
+        - x_display.stdout | trim != ""
+        - xauth.stdout | trim != ""
+
+    - name: Explain why launch was skipped
+      ansible.builtin.debug:
+        msg: >
+          No launch target found for {{ student_user }}.
+          firefox_cmd='{{ firefox_cmd.stdout | trim }}',
+          bus={{ bus_stat.stat.exists }},
+          wayland_sock='{{ wayland_sock.stdout }}',
+          x_display='{{ x_display.stdout }}',
+          xauth='{{ xauth.stdout }}'
+      when:
+        - not (bus_stat.stat.exists and (wayland_sock.stdout | trim) != "")
+        - not (bus_stat.stat.exists and (wayland_sock.stdout | trim) == "" and (x_display.stdout | trim) != "" and (xauth.stdout | trim) != "")

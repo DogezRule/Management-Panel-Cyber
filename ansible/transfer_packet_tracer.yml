@@ -1,0 +1,141 @@
+---
+- name: Install Cisco Packet Tracer (shows in Super/Windows search)
+  hosts: students
+  become: true
+  gather_facts: true
+
+  vars:
+    src_deb: /home/admin/Admin-Panel/cyberlab-admin/ansible/transfer/CiscoPacketTracer_900_Ubuntu_64bit.deb
+    dest_deb: /tmp/CiscoPacketTracer_900_Ubuntu_64bit.deb
+
+    qt_xcb_deps_base:
+      - libx11-6
+      - libx11-xcb1
+      - libxcb1
+      - libxcb-cursor0
+      - libxcb-xinerama0
+      - libxcb-icccm4
+      - libxcb-image0
+      - libxcb-keysyms1
+      - libxcb-render-util0
+      - libxcb-randr0
+      - libxcb-xkb1
+      - libxcb-xfixes0
+      - libxcb-shape0
+      - libxcb-shm0
+      - libxcb-sync1
+      - libxkbcommon-x11-0
+      - libglib2.0-0
+      - libdbus-1-3
+      - libnss3
+      - libfontconfig1
+      - libfreetype6
+      - libgcc-s1
+      - libstdc++6
+      - libgl1
+      - libegl1
+
+    app_desktop_file: /usr/share/applications/cisco-packettracer.desktop
+
+  tasks:
+    - name: Copy Packet Tracer .deb to target
+      ansible.builtin.copy:
+        src: "{{ src_deb }}"
+        dest: "{{ dest_deb }s}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+
+    - name: Choose correct ALSA package name (Ubuntu 24.04+ uses t64)
+      ansible.builtin.set_fact:
+        alsa_pkg: >-
+          {{ 'libasound2t64'
+             if (ansible_facts.distribution == 'Ubuntu'
+                 and (ansible_facts.distribution_version is version('24.04', '>=')))
+             else 'libasound2' }}
+
+    - name: Install runtime dependencies (Qt/XCB + ALSA)
+      ansible.builtin.apt:
+        name: "{{ qt_xcb_deps_base + [alsa_pkg] }}"
+        state: present
+
+    - name: Install Packet Tracer .deb via dpkg (may leave deps unconfigured)
+      ansible.builtin.command: "dpkg -i {{ dest_deb }}"
+      register: dpkg_install_1
+      changed_when: true
+      failed_when: false
+
+    - name: Fix missing dependencies (apt-get -f install)
+      ansible.builtin.command: "apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -f install"
+      register: apt_fix
+      changed_when: "'Setting up' in apt_fix.stdout or 'newly installed' in apt_fix.stdout or apt_fix.rc == 0"
+
+    # Optional: re-run dpkg in case PT wasn't fully configured the first time
+    - name: Re-run dpkg to ensure Packet Tracer is configured
+      ansible.builtin.command: "dpkg -i {{ dest_deb }}"
+      register: dpkg_install_2
+      changed_when: false
+      failed_when: false
+
+    - name: Find Packet Tracer AppImage
+      ansible.builtin.find:
+        paths:
+          - /opt
+          - /usr/local
+          - /usr
+        patterns:
+          - "packettracer*.AppImage"
+          - "PacketTracer*.AppImage"
+        file_type: file
+        recurse: true
+      register: pt_find
+
+    - name: Fail if AppImage not found
+      ansible.builtin.fail:
+        msg: "Installed, but no Packet Tracer AppImage found under /opt,/usr/local,/usr. matched={{ pt_find.matched }}"
+      when: pt_find.matched | int == 0
+
+    - name: Set AppImage path
+      ansible.builtin.set_fact:
+        appimage_path: "{{ (pt_find.files | sort(attribute='path'))[0].path }}"
+
+    - name: Ensure AppImage is executable
+      ansible.builtin.file:
+        path: "{{ appimage_path }}"
+        mode: "0755"
+
+    - name: Create global Packet Tracer .desktop entry (for Super search)
+      ansible.builtin.copy:
+        dest: "{{ app_desktop_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Version=1.0
+          Name=Packet Tracer
+          GenericName=Network Simulator
+          Comment=Cisco Packet Tracer
+          Exec=env QT_QPA_PLATFORM=xcb "{{ appimage_path }}"
+          Terminal=false
+          Icon=applications-internet
+          Categories=Education;Network;
+          StartupNotify=true
+
+    - name: Update desktop database (best-effort)
+      ansible.builtin.shell: |
+        command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database /usr/share/applications || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Done
+      ansible.builtin.debug:
+        msg: "Packet Tracer installed. Super-search 'Packet Tracer'. AppImage={{ appimage_path }}"

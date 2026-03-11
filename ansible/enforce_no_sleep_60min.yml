@@ -1,0 +1,122 @@
+---
+- name: Disable sleep/suspend and prevent screen blanking (student PCs)
+  hosts: students
+  become: true
+  gather_facts: true
+
+  vars:
+    student_user: student
+
+  tasks:
+    - name: Mask sleep-related systemd targets
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: true
+        enabled: false
+        state: stopped
+      loop:
+        - sleep.target
+        - suspend.target
+        - hibernate.target
+        - hybrid-sleep.target
+
+    - name: Ensure logind drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/logind.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Ensure logind does not suspend on lid close / idle
+      ansible.builtin.copy:
+        dest: /etc/systemd/logind.conf.d/99-no-sleep.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Login]
+          HandleLidSwitch=ignore
+          HandleLidSwitchExternalPower=ignore
+          HandleLidSwitchDocked=ignore
+          IdleAction=ignore
+          IdleActionSec=0
+      notify: Restart logind
+
+    - name: Get student UID
+      ansible.builtin.command: "id -u {{ student_user }}"
+      register: student_uid
+      changed_when: false
+
+    - name: Check if student's DBus session exists (must be logged in to apply now)
+      ansible.builtin.stat:
+        path: "/run/user/{{ student_uid.stdout }}/bus"
+      register: student_bus
+
+    - name: Apply GNOME power/lock/blanking settings for logged-in student
+      become_user: "{{ student_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ student_uid.stdout }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ student_uid.stdout }}/bus"
+      ansible.builtin.shell: |
+        set -e
+        gsettings set org.gnome.desktop.session idle-delay 0
+        gsettings set org.gnome.desktop.screensaver lock-enabled false
+        gsettings set org.gnome.desktop.screensaver lock-delay 0
+        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
+        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-timeout 0
+        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'nothing'
+        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout 0
+        gsettings set org.gnome.settings-daemon.plugins.power idle-dim false
+      args:
+        executable: /bin/bash
+      changed_when: false
+      when: student_bus.stat.exists
+
+    - name: Create dconf profile directory
+      ansible.builtin.file:
+        path: /etc/dconf/profile
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create dconf database directory
+      ansible.builtin.file:
+        path: /etc/dconf/db/local.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Set system-wide dconf defaults to prevent idle/sleep/lock
+      ansible.builtin.copy:
+        dest: /etc/dconf/db/local.d/00-no-sleep
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [org/gnome/desktop/session]
+          idle-delay=uint32 0
+
+          [org/gnome/desktop/screensaver]
+          lock-enabled=false
+          lock-delay=uint32 0
+
+          [org/gnome/settings-daemon/plugins/power]
+          sleep-inactive-ac-type='nothing'
+          sleep-inactive-ac-timeout=0
+          sleep-inactive-battery-type='nothing'
+          sleep-inactive-battery-timeout=0
+          idle-dim=false
+      notify: Update dconf
+
+  handlers:
+    - name: Restart logind
+      ansible.builtin.systemd:
+        name: systemd-logind
+        state: restarted
+
+    - name: Update dconf
+      ansible.builtin.command: dconf update
+      changed_when: true

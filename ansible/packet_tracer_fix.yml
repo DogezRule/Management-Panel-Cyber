@@ -1,0 +1,16 @@
+- name: Install additional Qt/X11 runtime packages for Packet Tracer
+  ansible.builtin.apt:
+    name:
+      - qtbase5-plugins
+      - libxrender1
+      - libxi6
+      - libxext6
+      - libxrandr2
+      - libxcursor1
+      - libxcomposite1
+      - libxdamage1
+      - libxfixes3
+      - libxtst6
+      - libsm6
+      - libice6
+    state: present

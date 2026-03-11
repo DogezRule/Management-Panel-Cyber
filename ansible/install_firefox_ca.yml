@@ -1,0 +1,84 @@
+---
+- name: Install Caddy Local Authority (Root + Intermediate) for Firefox Snap
+  hosts: students
+  become: true
+
+  vars:
+    root_ca_src: /home/admin/Admin-Panel/cyberlab-admin/deploy/certs/Caddy_2025_ECC_Root.crt
+    intermediate_ca_src: /home/admin/Admin-Panel/cyberlab-admin/deploy/certs/Caddy_ECC_Intermediate.crt
+
+    firefox_policy_dir: /etc/firefox/policies
+    firefox_cert_dir: /etc/firefox/policies/certs
+    firefox_policy_file: /etc/firefox/policies/policies.json
+
+    root_ca_policy_path: /etc/firefox/policies/certs/caddy-2025-ecc-root.crt
+    intermediate_ca_policy_path: /etc/firefox/policies/certs/caddy-ecc-intermediate.crt
+
+    install_into_system_store: true
+
+  tasks:
+    - name: Ensure Firefox policy + cert directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ firefox_policy_dir }}"
+        - "{{ firefox_cert_dir }}"
+
+    - name: Copy Root + Intermediate into Firefox policy cert dir
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - { src: "{{ root_ca_src }}", dest: "{{ root_ca_policy_path }}" }
+        - { src: "{{ intermediate_ca_src }}", dest: "{{ intermediate_ca_policy_path }}" }
+
+    - name: Configure Firefox policy to install CA certificates
+      ansible.builtin.copy:
+        dest: "{{ firefox_policy_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          {
+            "policies": {
+              "Certificates": {
+                "Install": [
+                  "{{ root_ca_policy_path }}",
+                  "{{ intermediate_ca_policy_path }}"
+                ]
+              }
+            }
+          }
+
+    - name: Install into system trust store (optional)
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - { src: "{{ root_ca_src }}", dest: "/usr/local/share/ca-certificates/caddy-2025-ecc-root.crt" }
+        - { src: "{{ intermediate_ca_src }}", dest: "/usr/local/share/ca-certificates/caddy-ecc-intermediate.crt" }
+      when: install_into_system_store
+
+    - name: Rebuild system CA trust store (optional)
+      ansible.builtin.command: update-ca-certificates --fresh
+      changed_when: false
+      when: install_into_system_store
+
+    - name: Kill Firefox so policy applies on restart (never fail)
+      ansible.builtin.shell: |
+        pkill -x firefox || true
+        pkill -x firefox-bin || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false

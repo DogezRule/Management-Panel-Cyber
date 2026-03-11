@@ -1,0 +1,46 @@
+---
+- name: Autostart Firefox to cybersecurity.local for student user
+  hosts: all
+  become: true
+
+  vars:
+    student_user: "student"
+    student_home: "/home/student"
+    target_url: "https://cybersecurity.local"
+
+  tasks:
+    - name: Ensure autostart directory exists
+      file:
+        path: "{{ student_home }}/.config/autostart"
+        state: directory
+        owner: "{{ student_user }}"
+        group: "{{ student_user }}"
+        mode: "0755"
+
+    - name: Install Firefox autostart desktop entry
+      copy:
+        dest: "{{ student_home }}/.config/autostart/cybersecurity-firefox-autostart.desktop"
+        owner: "{{ student_user }}"
+        group: "{{ student_user }}"
+        mode: "0644"
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=Cybersecurity Portal (Auto)
+          Comment=Launch Firefox to cybersecurity.local on login
+          Exec=firefox --new-window {{ target_url }}
+          Terminal=false
+          X-GNOME-Autostart-enabled=true
+          StartupNotify=false
+
+    # Optional: ensure firefox exists (won't install; just warns)
+    - name: Check if firefox is available
+      command: bash -lc "command -v firefox"
+      register: firefox_check
+      changed_when: false
+      failed_when: false
+
+    - name: Warn if firefox is not found
+      debug:
+        msg: "WARNING: 'firefox' not found in PATH on this host. Autostart will not work until Firefox is installed."
+      when: firefox_check.rc != 0
