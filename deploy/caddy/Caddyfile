@@ -1,9 +1,0 @@
-cybersecurity.local, :443 {
-    reverse_proxy /vnc-proxy/ws/* unix//run/cyberlab-admin/gunicorn.sock {
-        flush_interval -1
-    }
-
-    reverse_proxy unix//run/cyberlab-admin/gunicorn.sock
-
-    tls internal
-}
